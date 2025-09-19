@@ -1,5 +1,5 @@
 {
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://dhtd.onrender.com/:path*" }
+    { "source": "/api/:path*", "destination": "https://dhtd.onrender.com/api/:path*" }
   ]
 } 
