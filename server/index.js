@@ -246,6 +246,24 @@ function getSupabaseAdmin() {
   return createSupabaseClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
+async function ensureIndexes() {
+  try {
+    const client = getGlobalClient();
+    const stmts = [
+      "create index if not exists idx_profiles_created_at on profiles(created_at)",
+      "create index if not exists idx_posts_created_at on posts(created_at)",
+      "create index if not exists idx_notifications_user_created on notifications(user_id, created_at)",
+      "create index if not exists idx_tenant_requests_domain on tenant_requests(desired_domain)",
+      "create index if not exists idx_tenant_requests_status on tenant_requests(status)",
+      "create index if not exists idx_branches_tenant on branches(tenant_id)",
+      "create index if not exists idx_points_history_user_created on points_history(user_id, created_at)"
+    ];
+    for (const sql of stmts) { try { await client.execute(sql); } catch {} }
+  } catch {}
+}
+
+await ensureIndexes();
+
 async function ensureBucketPublic(supabase, bucket) {
   try {
     const { data } = await supabase.storage.getBucket(bucket);
