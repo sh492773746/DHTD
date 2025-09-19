@@ -27,19 +27,16 @@ app.use('*', secureHeaders());
 // Compression
 app.use('*', compress());
 
-// CORS allowlist
-const ROOT = process.env.NEXT_PUBLIC_ROOT_DOMAIN || '';
-const allow = new Set([
-  `http://${ROOT}`,
-  `https://${ROOT}`,
-  'http://localhost:3000',
-  'http://localhost:5173',
-]);
+// CORS allowlist (env-driven)
+const ROOT = process.env.NEXT_PUBLIC_ROOT_DOMAIN || process.env.ROOT_DOMAIN || '';
+const RAW_ALLOWED = process.env.ALLOWED_ORIGINS || '';
+const STATIC_ALLOW = new Set(['http://localhost:3000','http://localhost:5173']);
+const DYNAMIC_ALLOW = new Set(RAW_ALLOWED.split(',').map(s => s.trim()).filter(Boolean));
 app.use('*', cors({
   origin: (origin) => {
-    if (!origin) return true;
-    if (allow.has(origin)) return true;
-    if (ROOT && origin.endsWith(`.${ROOT}`)) return true;
+    if (!origin) return true; // non-browser or same-origin
+    if (STATIC_ALLOW.has(origin) || DYNAMIC_ALLOW.has(origin)) return true;
+    if (ROOT && origin.endsWith(`.${ROOT}`)) return true; // *.root-domain
     return false;
   },
   allowMethods: ['GET','POST','PUT','DELETE','OPTIONS'],
@@ -205,32 +202,45 @@ app.use('*', async (c, next) => {
   c.set('host', host);
 
   const auth = c.req.header('authorization');
+  let userId = null;
   if (auth?.startsWith('Bearer ')) {
     const token = auth.slice(7);
     try {
       if (SUPABASE_JWKS && supabaseIssuer) {
-        try {
-          const { payload } = await jwtVerify(token, SUPABASE_JWKS, { issuer: supabaseIssuer });
-          c.set('userId', payload?.sub || null);
-        } catch (e) {
-    try {
-      const payload = decodeJwt(token);
-            if (!supabaseIssuer || !payload?.iss || String(payload.iss).startsWith(supabaseIssuer)) {
-      c.set('userId', payload?.sub || null);
-            } else {
-              c.set('userId', null);
-            }
-          } catch {
-            c.set('userId', null);
+        const { payload } = await jwtVerify(token, SUPABASE_JWKS, { issuer: supabaseIssuer });
+        userId = payload?.sub || null;
+      } else {
+        if (process.env.NODE_ENV !== 'production') {
+          const payload = decodeJwt(token);
+          if (!supabaseIssuer || !payload?.iss || String(payload.iss).startsWith(supabaseIssuer)) {
+            userId = payload?.sub || null;
           }
         }
-      } else {
-        const payload = decodeJwt(token);
-        c.set('userId', payload?.sub || null);
       }
     } catch {
-      c.set('userId', null);
+      if (process.env.NODE_ENV !== 'production') {
+        try {
+          const payload = decodeJwt(token);
+          if (!supabaseIssuer || !payload?.iss || String(payload.iss).startsWith(supabaseIssuer)) {
+            userId = payload?.sub || null;
+          }
+        } catch {}
+      }
     }
+  }
+  c.set('userId', userId);
+  await next();
+});
+
+// Unified admin guard for all /api/admin/* routes
+app.use('/api/admin/*', async (c, next) => {
+  const userId = c.get('userId');
+  if (!userId) return c.json({ error: 'unauthorized' }, 401);
+  try {
+    const ok = await isSuperAdminUser(userId);
+    if (!ok) return c.json({ error: 'forbidden' }, 403);
+  } catch {
+    return c.json({ error: 'forbidden' }, 403);
   }
   await next();
 });
