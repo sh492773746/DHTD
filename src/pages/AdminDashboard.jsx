@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { motion } from 'framer-motion';
 import { Users, FileText } from 'lucide-react';
@@ -12,7 +12,8 @@ import { zhCN } from 'date-fns/locale';
 import { useQuery } from '@tanstack/react-query';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from '@/components/ui/skeleton';
-import UmamiOverviewCard from '@/components/PlausibleStats';
+
+const UmamiOverviewCard = lazy(() => import('@/components/PlausibleStats'));
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, LineController, Title, Tooltip, Legend);
 
@@ -60,6 +61,7 @@ const AdminDashboard = () => {
   const { data, isLoading } = useQuery({
     queryKey: ['dashboardData'],
     queryFn: () => fetchStats(),
+    staleTime: 60_000,
   });
 
   const { data: recentUsers, isLoading: isLoadingRecent } = useQuery({
@@ -72,6 +74,7 @@ const AdminDashboard = () => {
       return sorted.slice(0, 5);
     },
     enabled: !!session?.access_token,
+    staleTime: 60_000,
   });
 
   const chartData = useMemo(() => {
@@ -143,7 +146,9 @@ const AdminDashboard = () => {
           <StatCard title="总发帖数" value={isLoading ? '...' : data?.totalPosts?.toLocaleString() || '0'} icon={FileText} loading={isLoading} />
         </div>
 
-        <UmamiOverviewCard period={period} />
+        <Suspense fallback={<Skeleton className="w-full h-[120px]" />}>
+          <UmamiOverviewCard period={period} />
+        </Suspense>
 
         <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-7">
           <Card className="lg:col-span-4">
