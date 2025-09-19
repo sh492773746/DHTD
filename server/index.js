@@ -18,6 +18,8 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import dns from 'node:dns/promises';
+import net from 'node:net';
 
 const app = new Hono();
 
@@ -107,6 +109,35 @@ function __setCache(c, seconds) {
 app.use('/api', __writeLimiter);
 app.use('/api/uploads/resumable', __chunkLimiter);
 app.use('/api/uploads', __uploadLimiter);
+
+// JSON body size limit
+const MAX_JSON_BYTES = Number(process.env.MAX_JSON_BYTES || 262144);
+app.use('*', async (c, next) => {
+  const len = Number(c.req.header('content-length') || 0);
+  if (len > MAX_JSON_BYTES) return c.json({ error: 'payload-too-large' }, 413);
+  await next();
+});
+
+// Light GET rate limit for hot endpoints
+const __getRate = new Map();
+function __rlKey(c) {
+  const fwd = c.req.header('x-forwarded-for') || '';
+  const ip = (fwd.split(',')[0] || '').trim() || c.req.header('x-real-ip') || c.req.header('cf-connecting-ip') || '';
+  return ip || 'anon';
+}
+function __isGetLimited(c, limit = 30, windowMs = 10_000) {
+  const key = `g:${__rlKey(c)}`;
+  const now = Date.now();
+  const bucket = __getRate.get(key) || { count: 0, reset: now + windowMs };
+  if (now > bucket.reset) { bucket.count = 0; bucket.reset = now + windowMs; }
+  bucket.count++;
+  __getRate.set(key, bucket);
+  return bucket.count > limit;
+}
+app.use(['/api/umami', '/api/notifications', '/api/admin/users'], async (c, next) => {
+  if ((c.req.method || 'GET').toUpperCase() === 'GET' && __isGetLimited(c)) return c.json({ error: 'too-many-requests' }, 429);
+  await next();
+});
 
 async function getBranchUrlForTenant(tenantId) {
   if (!tenantId) return null;
@@ -4718,12 +4749,33 @@ app.post('/api/admin/tenants/:id/domain/bind', async (c) => {
     const auth = requireAdmin(c);
     if (!auth.ok) return c.json({ ok: false, error: auth.reason }, 401);
     const id = Number(c.req.param('id')); if (!id) return c.json({ ok: false, error: 'invalid' }, 400);
-    const body = await c.req.json();
-    const domain = String(body?.domain || '').trim();
-    if (!domain) return c.json({ ok: false, error: 'invalid-domain' }, 400);
-    const token = process.env.VERCEL_TOKEN;
-    const projectId = process.env.VERCEL_PROJECT_ID;
-    const teamId = process.env.VERCEL_TEAM_ID;
+      const body = await c.req.json();
+  const domain = String(body?.domain || '').trim();
+  if (!domain) return c.json({ ok: false, error: 'invalid-domain' }, 400);
+  // SSRF guard: FQDN only, no ports
+  if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(domain)) return c.json({ ok: false, error: 'invalid-domain' }, 400);
+  try {
+    const results = await dns.lookup(domain, { all: true });
+    for (const { address } of results) {
+      if (net.isIP(address)) {
+        // block loopback/linklocal/private ranges
+        const isV4 = address.includes('.');
+        if (address === '127.0.0.1' || address === '::1') return c.json({ ok: false, error: 'private-ip' }, 400);
+        if (isV4) {
+          const oct = address.split('.').map(Number);
+          if (oct[0] === 10) return c.json({ ok: false, error: 'private-ip' }, 400);
+          if (oct[0] === 172 && oct[1] >= 16 && oct[1] <= 31) return c.json({ ok: false, error: 'private-ip' }, 400);
+          if (oct[0] === 192 && oct[1] === 168) return c.json({ ok: false, error: 'private-ip' }, 400);
+          if (oct[0] === 169 && oct[1] === 254) return c.json({ ok: false, error: 'link-local' }, 400);
+        }
+      }
+    }
+  } catch {
+    return c.json({ ok: false, error: 'dns-lookup-failed' }, 400);
+  }
+  const token = process.env.VERCEL_TOKEN;
+  const projectId = process.env.VERCEL_PROJECT_ID;
+  const teamId = process.env.VERCEL_TEAM_ID;
     if (!token || !projectId) return c.json({ ok: false, error: 'vercel-env-missing' }, 500);
     const url = new URL(`https://api.vercel.com/v10/projects/${projectId}/domains`);
     if (teamId) url.searchParams.set('teamId', teamId);
@@ -4774,9 +4826,27 @@ app.get('/api/admin/tenants/:id/connectivity', async (c) => {
     const id = Number(c.req.param('id')); if (!id) return c.json({ ok: false, error: 'invalid' }, 400);
     const gdb = getGlobalDb(); await ensureTenantRequestsSchemaRaw(getGlobalClient());
     const row = (await gdb.select().from(tenantRequestsTable).where(eq(tenantRequestsTable.id, id)).limit(1))?.[0] || null;
-    const customDomain = row ? (row.desiredDomain || row.desired_domain || null) : null;
-    const vercelDomain = row ? (row.vercelAssignedDomain || row.vercel_assigned_domain || null) : null;
-    async function probe(url) {
+      const customDomain = row ? (row.desiredDomain || row.desired_domain || null) : null;
+  const vercelDomain = row ? (row.vercelAssignedDomain || row.vercel_assigned_domain || null) : null;
+  // SSRF guard for both domains
+  const check = async (d) => {
+    if (!d) return null;
+    if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(d)) throw new Error('invalid-domain');
+    const results = await dns.lookup(d, { all: true });
+    for (const { address } of results) {
+      if (address === '127.0.0.1' || address === '::1') throw new Error('private-ip');
+      if (address.includes('.')) {
+        const oct = address.split('.').map(Number);
+        if (oct[0] === 10) throw new Error('private-ip');
+        if (oct[0] === 172 && oct[1] >= 16 && oct[1] <= 31) throw new Error('private-ip');
+        if (oct[0] === 192 && oct[1] === 168) throw new Error('private-ip');
+        if (oct[0] === 169 && oct[1] === 254) throw new Error('link-local');
+      }
+    }
+    return d;
+  };
+  try { await Promise.all([check(customDomain), check(vercelDomain)]); } catch (e) { return c.json({ ok: false, error: 'invalid-domain' }, 400); }
+  async function probe(url) {
       if (!url) return { url: null, ok: false, status: 0 };
       const controller = new AbortController();
       const t = setTimeout(() => controller.abort(), 5000);
