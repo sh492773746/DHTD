@@ -1,46 +1,34 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase as supabaseClient } from '@/lib/customSupabaseClient';
 import WeChatPostCard from '@/components/WeChatPostCard';
 import { Skeleton } from '@/components/ui/skeleton';
 import { motion } from 'framer-motion';
 
-const fetchUserPosts = async (userId) => {
+const mapPost = (p) => ({
+  id: p.id,
+  content: p.content,
+  created_at: p.createdAt,
+  updated_at: p.updatedAt,
+  is_ad: p.isAd,
+  is_pinned: p.isPinned,
+  status: p.status,
+  rejection_reason: p.rejectionReason,
+  image_urls: Array.isArray(p.images) ? p.images : (() => { try { return JSON.parse(p.images || '[]'); } catch { return []; } })(),
+  edit_count: p.editCount,
+  tenant_id: p.tenantId,
+  author: p.author,
+  comments_count: p.commentsCount || 0,
+  likes_count: p.likesCount || 0,
+  likes: [],
+  comments: [],
+});
+
+const fetchUserPosts = async (userId, isAd) => {
   if (!userId) return [];
-
-  const { data, error } = await supabaseClient
-    .from('posts')
-    .select(`
-      id,
-      content,
-      created_at,
-      updated_at,
-      is_ad,
-      is_pinned,
-      status,
-      rejection_reason,
-      image_urls,
-      edit_count,
-      tenant_id,
-      author:profiles(id, username, avatar_url, role),
-      comments(id),
-      likes(user_id)
-    `)
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    console.error("Error fetching user posts:", error);
-    throw new Error(error.message);
-  }
-
-  return data.map(post => ({
-    ...post,
-    likes_count: post.likes?.length || 0,
-    comments_count: post.comments?.length || 0,
-    likes: post.likes || [],
-    comments: post.comments || [],
-  }));
+  const res = await fetch(`/api/posts?authorId=${encodeURIComponent(userId)}&page=0&size=50${isAd ? '&tab=ads' : '&tab=social'}`);
+  if (!res.ok) throw new Error('Failed to load user posts');
+  const data = await res.json();
+  return (data || []).map(mapPost).filter(p => !!p); // defensive
 };
 
 const PostSkeleton = () => (
@@ -60,48 +48,56 @@ const PostSkeleton = () => (
 );
 
 const UserPostHistory = ({ userId }) => {
+  const [tab, setTab] = React.useState('social');
+  const isAd = tab === 'ads';
+
   const { data: posts, isLoading, isError, error } = useQuery({
-    queryKey: ['userPosts', userId],
-    queryFn: () => fetchUserPosts(userId),
+    queryKey: ['userPosts', userId, tab],
+    queryFn: () => fetchUserPosts(userId, isAd),
     enabled: !!userId,
   });
 
-  if (isLoading) {
     return (
-      <div className="space-y-4">
+    <div className="mt-6">
+      <div className="sticky top-16 bg-background/80 backdrop-blur-sm z-10 p-2 rounded-b-lg">
+        <div className="flex bg-muted p-1 rounded-full">
+          <button onClick={() => setTab('social')} className={`w-full py-2 rounded-full transition-colors text-sm font-semibold ${tab === 'social' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>朋友圈</button>
+          <button onClick={() => setTab('ads')} className={`w-full py-2 rounded-full transition-colors text-sm font-semibold ${tab === 'ads' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>白菜区</button>
+        </div>
+      </div>
+
+      {isLoading && (
+        <div className="space-y-4 mt-4">
         <PostSkeleton />
         <PostSkeleton />
       </div>
-    );
-  }
+      )}
 
-  if (isError) {
-    return (
-      <div className="text-center py-12 text-red-500">
+      {isError && (
+        <div className="text-center py-12 text-red-500 mt-4">
         <p>加载动态失败: {error.message}</p>
       </div>
-    );
-  }
+      )}
 
-  if (!posts || posts.length === 0) {
-    return (
+      {!isLoading && !isError && (!posts || posts.length === 0) && (
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-center py-12 bg-gray-50 rounded-lg"
+          className="text-center py-12 bg-gray-50 rounded-lg mt-4"
       >
         <div className="text-5xl mb-4">🤷‍♂️</div>
-        <h3 className="text-lg font-semibold text-gray-700 mb-1">朋友圈空空如也</h3>
-        <p className="text-sm text-gray-500">该用户还没有发布过任何动态。</p>
+          <h3 className="text-lg font-semibold text-gray-700 mb-1">{tab === 'social' ? '朋友圈空空如也' : '白菜区暂无内容'}</h3>
+          <p className="text-sm text-gray-500">该用户还没有发布过任何{tab === 'social' ? '朋友圈内容' : '白菜内容'}。</p>
       </motion.div>
-    );
-  }
+      )}
 
-  return (
-    <div className="space-y-4">
+      {!isLoading && !isError && posts && posts.length > 0 && (
+        <div className="space-y-4 mt-4">
       {posts.map(post => (
         <WeChatPostCard key={post.id} post={post} onPostUpdated={() => {}} onDeletePost={() => {}} />
       ))}
+        </div>
+      )}
     </div>
   );
 };

@@ -1,7 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
-import { supabase as supabaseClient } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import PostComments from '@/components/PostComments';
 import ImageLightbox from '@/components/ImageLightbox';
@@ -23,11 +22,11 @@ import PostImageGrid from '@/components/wechat-post-card/PostImageGrid';
 import PostFooter from '@/components/wechat-post-card/PostFooter';
 
 const WeChatPostCard = ({ post, onPostUpdated, onDeletePost }) => {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, session } = useAuth();
   const { toast } = useToast();
   
-  const [hasLiked, setHasLiked] = React.useState(post.likes?.some(like => like.user_id === user?.id));
-  const [likesCount, setLikesCount] = React.useState(post.likes_count || 0);
+  const [hasLiked, setHasLiked] = React.useState(!!post.likedByMe);
+  const [likesCount, setLikesCount] = React.useState(post.likes_count || post.likesCount || 0);
   const [showComments, setShowComments] = React.useState(false);
   const [comments, setComments] = React.useState(post.comments || []);
   
@@ -38,20 +37,22 @@ const WeChatPostCard = ({ post, onPostUpdated, onDeletePost }) => {
   const isAuthor = user && post.author?.id === user.id;
 
   React.useEffect(() => {
-     supabaseClient
-      .from('comments')
-      .select('*, author:profiles(id, username, avatar_url)')
-      .eq('post_id', post.id)
-      .eq('status', 'approved')
-      .order('created_at', { ascending: false })
-      .then(({ data }) => setComments(data || []));
+    const load = async () => {
+      try {
+        const res = await fetch(`/api/comments?postId=${encodeURIComponent(post.id)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        setComments(data || []);
+      } catch {}
+    };
+    load();
   }, [post.id]);
 
   React.useEffect(() => {
-    setHasLiked(post.likes?.some(like => like.user_id === user?.id));
-    setLikesCount(post.likes_count || 0);
+    setHasLiked(!!post.likedByMe);
+    setLikesCount(post.likes_count || post.likesCount || 0);
     setComments(post.comments || []);
-  }, [post.likes, post.likes_count, post.comments, user]);
+  }, [post.likes_count, post.likesCount, post.comments, post.likedByMe]);
 
   const handleLike = async () => {
     if (!user) {
@@ -67,17 +68,17 @@ const WeChatPostCard = ({ post, onPostUpdated, onDeletePost }) => {
     setHasLiked(newHasLiked);
     setLikesCount(prev => newHasLiked ? prev + 1 : Math.max(0, prev - 1));
 
-    const rpcName = 'likes';
-    const method = newHasLiked ? 'insert' : 'delete';
-    const match = newHasLiked ? {} : { post_id: post.id, user_id: user.id };
-    const body = newHasLiked ? { post_id: post.id, user_id: user.id, tenant_id: post.tenant_id } : undefined;
-
-    const { error } = await supabaseClient.from(rpcName)[method](body).match(match);
-
-    if (error) {
+    try {
+      const res = await fetch('/api/likes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
+        body: JSON.stringify({ postId: post.id, like: newHasLiked })
+      });
+      if (!res.ok) throw new Error('like failed');
+    } catch (e) {
       setHasLiked(!newHasLiked);
       setLikesCount(prev => !newHasLiked ? prev + 1 : Math.max(0, prev - 1));
-      toast({ variant: "destructive", title: newHasLiked ? "点赞失败" : "取消点赞失败", description: error.message });
+      toast({ variant: "destructive", title: newHasLiked ? "点赞失败" : "取消点赞失败" });
     }
   };
   
@@ -90,33 +91,33 @@ const WeChatPostCard = ({ post, onPostUpdated, onDeletePost }) => {
   };
   
   const handleDeletePost = async () => {
-    const { error } = await supabaseClient.rpc('delete_post_and_images', { post_id_to_delete: post.id });
-
-    if (error) {
-      toast({ variant: "destructive", title: "删除失败", description: error.message });
-    } else {
+    try {
+      const res = await fetch(`/api/posts/${post.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${session?.access_token || ''}` } });
+      if (!res.ok) throw new Error('failed');
       toast({ title: "删除成功", description: "帖子已删除。" });
       onDeletePost(post.id);
+    } catch (e) {
+      toast({ variant: "destructive", title: "删除失败" });
     }
     setIsDeleting(false);
   };
   
   const handleTogglePin = async () => {
-    const { data, error } = await supabaseClient
-      .from('posts')
-      .update({ is_pinned: !post.is_pinned })
-      .eq('id', post.id)
-      .select()
-      .single();
-
-    if (error) {
-      toast({ variant: "destructive", title: "操作失败", description: error.message });
-    } else {
-      toast({ title: "操作成功", description: `帖子已${data.is_pinned ? '置顶' : '取消置顶'}` });
-      onPostUpdated(data);
+    try {
+      const res = await fetch(`/api/posts/${post.id}/pin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
+        body: JSON.stringify({ pinned: !post.is_pinned && !post.isPinned })
+      });
+      if (!res.ok) throw new Error('failed');
+      const updated = await res.json();
+      toast({ title: "操作成功", description: `帖子已${(updated.is_pinned || updated.isPinned) ? '置顶' : '取消置顶'}` });
+      onPostUpdated({ ...post, is_pinned: updated.is_pinned ?? updated.isPinned });
+    } catch (e) {
+      toast({ variant: "destructive", title: "操作失败" });
     }
   };
-
+  
   const handleEditClick = () => {
     if (post.edit_count > 0 && !isAdmin) {
       toast({

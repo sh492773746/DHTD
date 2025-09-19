@@ -73,7 +73,7 @@ const AdminCryptoDemo = () => {
           <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
             <h1 className="text-3xl font-bold text-gray-800">iFrame 嵌入工具</h1>
             <p className="text-lg text-gray-600 mt-2">
-              嵌入代码是基于您在 <a href="/admin/settings" className="text-blue-600 underline">系统设置</a> 中配置的密钥自动生成的。
+              嵌入代码是基于您在 <a href="/admin/site-settings" className="text-blue-600 underline">系统设置</a> 中配置的密钥自动生成的。
             </p>
           </motion.div>
           

@@ -10,6 +10,7 @@ import {
   Palette,
   ShoppingBag,
   Wand2,
+  Database,
 } from 'lucide-react';
 
 export const mainNavItems = [
@@ -36,13 +37,13 @@ export const adminNavItems = [
     items: [
       { to: '/admin/site-settings', label: '主站设置', icon: Settings },
       { to: '/admin/page-content', label: '页面内容', icon: Palette },
-      { to: '/admin/settings', label: '应用配置', icon: Wand2 },
     ],
   },
   {
     title: 'SaaS',
     items: [
       { to: '/admin/saas', label: '分站管理', icon: Globe },
+      { to: '/admin/databases', label: '数据库管理', icon: Database },
     ],
   },
 ];

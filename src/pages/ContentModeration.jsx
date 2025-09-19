@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { motion } from 'framer-motion';
-import { supabase as supabaseClient } from '@/lib/customSupabaseClient';
+// Use BFF instead of direct Supabase queries
 import { useToast } from '@/components/ui/use-toast';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -79,44 +79,57 @@ const ContentModeration = () => {
     const [contentByUser, setContentByUser] = useState({});
     const [loading, setLoading] = useState(true);
     const { toast } = useToast();
-    const { isInitialized, isSuperAdmin } = useAuth();
+    const { isInitialized, isSuperAdmin, session } = useAuth();
     const { activeTenantId } = useTenant();
 
     const fetchData = useCallback(async () => {
         setLoading(true);
-        
-        // Let RLS handle the tenant filtering based on the domain.
-        let postsQuery = supabaseClient.from('posts').select('*, author:profiles(id, username, avatar_url)').order('created_at', { ascending: false });
-        let commentsQuery = supabaseClient.from('comments').select('*, author:profiles(id, username, avatar_url), post:posts(content)').order('created_at', { ascending: false });
-        
-        const [postsRes, commentsRes] = await Promise.all([postsQuery, commentsQuery]);
+        try {
+            const headers = { Authorization: `Bearer ${session?.access_token || ''}` };
+            const [postsRes, commentsRes] = await Promise.all([
+                fetch('/api/admin/posts', { headers }),
+                fetch('/api/admin/comments', { headers }),
+            ]);
+            if (!postsRes.ok) throw new Error(`帖子获取失败(${postsRes.status})`);
+            if (!commentsRes.ok) throw new Error(`评论获取失败(${commentsRes.status})`);
+            const postsData = await postsRes.json();
+            const commentsData = await commentsRes.json();
 
-        if (postsRes.error) toast({ title: '获取帖子失败', description: postsRes.error.message, variant: 'destructive' });
-        if (commentsRes.error) toast({ title: '获取评论失败', description: commentsRes.error.message, variant: 'destructive' });
+            // Normalize fields to created_at etc.
+            const posts = (postsData || []).map(p => ({
+                ...p,
+                created_at: p.created_at || p.createdAt,
+                is_ad: p.is_ad ?? p.isAd ?? 0,
+                author: p.author || null,
+            }));
+            const comments = (commentsData || []).map(c => ({
+                ...c,
+                created_at: c.created_at || c.createdAt,
+                author: c.author || null,
+                post: c.post || null,
+            }));
 
-        const groupedContent = {};
-
-        (postsRes.data || []).forEach(post => {
-            const userId = post.author?.id;
-            if (!userId) return;
-            if (!groupedContent[userId]) {
-                groupedContent[userId] = { profile: post.author, posts: [], comments: [] };
+            const groupedContent = {};
+            for (const post of posts) {
+                const uid = post.author?.id;
+                if (!uid) continue;
+                if (!groupedContent[uid]) groupedContent[uid] = { profile: post.author, posts: [], comments: [] };
+                groupedContent[uid].posts.push(post);
             }
-            groupedContent[userId].posts.push(post);
-        });
-
-        (commentsRes.data || []).forEach(comment => {
-            const userId = comment.author?.id;
-            if (!userId) return;
-            if (!groupedContent[userId]) {
-                groupedContent[userId] = { profile: comment.author, posts: [], comments: [] };
+            for (const c of comments) {
+                const uid = c.author?.id;
+                if (!uid) continue;
+                if (!groupedContent[uid]) groupedContent[uid] = { profile: c.author, posts: [], comments: [] };
+                groupedContent[uid].comments.push(c);
             }
-            groupedContent[userId].comments.push(comment);
-        });
-
-        setContentByUser(groupedContent);
-        setLoading(false);
-    }, [toast]);
+            setContentByUser(groupedContent);
+        } catch (err) {
+            toast({ title: '加载失败', description: err.message || '网络错误', variant: 'destructive' });
+            setContentByUser({});
+        } finally {
+            setLoading(false);
+        }
+    }, [toast, session?.access_token]);
 
     useEffect(() => {
         if (isInitialized) {
@@ -125,32 +138,29 @@ const ContentModeration = () => {
     }, [fetchData, isInitialized, activeTenantId]);
 
     const handleUpdateStatus = async (type, id, status, reason = null) => {
-        const table = type === 'post' ? 'posts' : 'comments';
-        const updateData = { status };
-        if (reason !== null) {
-            updateData.rejection_reason = reason;
-        }
-
-        const { error } = await supabaseClient.from(table).update(updateData).eq('id', id);
-
-        if (error) {
-            toast({ title: '更新状态失败', description: error.message, variant: 'destructive' });
-        } else {
+        try {
+            if (type !== 'post') {
+                toast({ title: '提示', description: '评论暂不支持状态更新，请使用删除。' });
+                return;
+            }
+            const res = await fetch(`/api/admin/posts/${id}/status`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
+                body: JSON.stringify({ status, reason })
+            });
+            if (!res.ok) throw new Error(`更新失败(${res.status})`);
             toast({ title: '状态更新成功' });
             fetchData();
+        } catch (e) {
+            toast({ title: '更新状态失败', description: e.message, variant: 'destructive' });
         }
     };
     
     const handleDelete = async (type, id) => {
-        const table = type === 'post' ? 'posts' : 'comments';
-         try {
-            if (type === 'post') {
-                const { error } = await supabaseClient.rpc('delete_post_and_images', { post_id_to_delete: id });
-                if (error) throw error;
-            } else {
-                const { error } = await supabaseClient.from(table).delete().eq('id', id);
-                if (error) throw error;
-            }
+        try {
+            let url = type === 'post' ? `/api/posts/${id}` : `/api/comments/${id}`;
+            const res = await fetch(url, { method: 'DELETE', headers: { Authorization: `Bearer ${session?.access_token || ''}` } });
+            if (!res.ok) throw new Error(`删除失败(${res.status})`);
             toast({ title: '删除成功' });
             fetchData();
         } catch (error) {
@@ -163,7 +173,7 @@ const ContentModeration = () => {
             const aContent = [...a.posts, ...a.comments].sort((c, d) => new Date(d.created_at) - new Date(c.created_at));
             const bContent = [...b.posts, ...b.comments].sort((c, d) => new Date(d.created_at) - new Date(c.created_at));
             const aDate = aContent[0]?.created_at;
-            const bDate = bContent[0]?.created_at;
+            const bDate = bContent[0] && bContent[0].created_at;
             if (!aDate) return 1;
             if (!bDate) return -1;
             return new Date(bDate) - new Date(aDate);

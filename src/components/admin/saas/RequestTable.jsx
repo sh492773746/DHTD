@@ -54,7 +54,7 @@ const RequestTable = ({ requests, isSubmitting, onApprove, onReject, onDelete, o
                   <span className="font-medium">{request.profile?.username}</span>
                 </div>
               </TableCell>
-              <TableCell>{request.contact_wangwang}</TableCell>
+              <TableCell>{request.contact_wangwang || request.contactWangWang || request.contactwangwang || '-'}</TableCell>
               <TableCell>
                 <a 
                   href={`https://${request.desired_domain}`} 

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Image, XCircle, Loader2 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
+import { useAuth } from '@/contexts/SupabaseAuthContext';
 
 const POST_MAX_LENGTH = 300;
 
@@ -14,6 +15,7 @@ const EditPostDialog = ({ isOpen, setIsOpen, post, onPostUpdated }) => {
     const [imagePreviews, setImagePreviews] = useState([]);
     const [existingImageUrls, setExistingImageUrls] = useState([]);
     const fileInputRef = useRef(null);
+    const { session } = useAuth();
 
     useEffect(() => {
         if (post) {
@@ -25,11 +27,11 @@ const EditPostDialog = ({ isOpen, setIsOpen, post, onPostUpdated }) => {
     }, [post]);
 
     const handleFileSelect = (e) => {
-        toast({ title: "功能已禁用", description: "请先集成数据库以启用此功能。", variant: "destructive" });
+        toast({ title: "暂不支持图片编辑", description: "当前版本仅允许编辑文字内容。", variant: "destructive" });
     };
 
     const removeNewImage = (index) => {
-        // This part is disabled as file upload is disabled
+        // 图片编辑暂不支持
     };
 
     const removeExistingImage = (index) => {
@@ -37,7 +39,48 @@ const EditPostDialog = ({ isOpen, setIsOpen, post, onPostUpdated }) => {
     };
 
     const handleSave = async () => {
-        toast({ title: "功能已禁用", description: "请先集成数据库以启用此功能。", variant: "destructive" });
+        if (!session?.access_token) {
+            toast({ variant: 'destructive', title: '请先登录' });
+            return;
+        }
+        if (!post?.id) return;
+        if (!content.trim()) {
+            toast({ variant: 'destructive', title: '内容不能为空' });
+            return;
+        }
+        setIsSaving(true);
+        try {
+            // shared 帖子没有 tenantId/tenant_id 字段；tenantId=0 仍然是租户帖
+            const isShared = (post.tenant_id === undefined && post.tenantId === undefined);
+            const url = isShared ? `/api/shared/posts/${post.id}` : `/api/posts/${post.id}`;
+            const res = await fetch(url, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+                body: JSON.stringify({ content }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                if (data?.error === 'already-edited') {
+                    toast({ variant: 'destructive', title: '编辑次数已用完', description: '每个帖子只能编辑一次。' });
+                    setIsOpen(false);
+                    return;
+                }
+                throw new Error(data?.error || `status ${res.status}`);
+            }
+            const updated = {
+                ...post,
+                content: data.content ?? content,
+                updated_at: data.updated_at || data.updatedAt || new Date().toISOString(),
+                image_urls: Array.isArray(data.images) ? data.images : (() => { try { return JSON.parse(data.images || '[]'); } catch { return post.image_urls || []; } })(),
+            };
+            toast({ title: '保存成功' });
+            onPostUpdated && onPostUpdated(updated);
+            setIsOpen(false);
+        } catch (e) {
+            toast({ variant: 'destructive', title: '保存失败', description: e.message });
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const allImages = [...existingImageUrls, ...imagePreviews];
@@ -48,12 +91,12 @@ const EditPostDialog = ({ isOpen, setIsOpen, post, onPostUpdated }) => {
                 <DialogHeader>
                     <DialogTitle>编辑帖子</DialogTitle>
                     <DialogDescription>
-                        修改你的帖子内容和图片。点击保存以应用更改。
+                        修改你的帖子内容（每条帖子仅可编辑一次）。
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                     <Textarea
-                        placeholder="有什么新鲜事想分享吗？"
+                        placeholder="修改后的内容"
                         value={content}
                         onChange={(e) => setContent(e.target.value)}
                         maxLength={POST_MAX_LENGTH}
@@ -68,11 +111,7 @@ const EditPostDialog = ({ isOpen, setIsOpen, post, onPostUpdated }) => {
                             {allImages.map((src, index) => (
                                 <div key={index} className="relative aspect-square">
                                     <img src={src} alt={`Preview ${index + 1}`} className="rounded-lg object-cover w-full h-full" />
-                                    <Button
-                                        type="button" variant="ghost" size="icon"
-                                        className="absolute top-1 right-1 bg-black/50 text-white hover:bg-black/70 hover:text-white h-6 w-6 rounded-full"
-                                        onClick={() => index < existingImageUrls.length ? removeExistingImage(index) : removeNewImage(index - existingImageUrls.length)}
-                                    >
+                                    <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 bg-black/50 text-white hover:bg-black/70 hover:text-white h-6 w-6 rounded-full" onClick={() => removeExistingImage(index)} disabled>
                                         <XCircle className="h-4 w-4" />
                                     </Button>
                                 </div>
@@ -80,35 +119,17 @@ const EditPostDialog = ({ isOpen, setIsOpen, post, onPostUpdated }) => {
                         </div>
                     )}
                      <div className="flex items-center">
-                        <input
-                            type="file"
-                            ref={fileInputRef}
-                            onChange={handleFileSelect}
-                            accept="image/png, image/jpeg, image/gif"
-                            className="hidden"
-                            multiple
-                        />
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => fileInputRef.current.click()}
-                            disabled={allImages.length >= 9}
-                        >
+                        <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/png, image/jpeg, image/gif" className="hidden" multiple />
+                        <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current.click()} disabled>
                             <Image className="w-4 h-4 mr-2" />
-                            添加图片 ({allImages.length}/9)
+                            编辑图片（暂不支持）
                         </Button>
                     </div>
                 </div>
                 <DialogFooter>
                     <Button variant="ghost" onClick={() => setIsOpen(false)}>取消</Button>
-                    <Button onClick={handleSave} disabled={isSaving} variant="gradient">
-                        {isSaving ? (
-                            <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                保存中...
-                            </>
-                        ) : '保存更改'}
+                    <Button onClick={handleSave} disabled={isSaving}>
+                        {isSaving ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> 保存中...</>) : '保存更改'}
                     </Button>
                 </DialogFooter>
             </DialogContent>

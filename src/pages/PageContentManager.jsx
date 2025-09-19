@@ -9,73 +9,71 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { pageConfig as basePageConfig } from '@/config/pageContentConfig';
 import ContentSection from '@/components/admin/ContentSection';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
+
 import { useTenant } from '@/contexts/TenantContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-const fetchPageContent = async (supabase, tenantId, page) => {
-    if (!supabase || tenantId === undefined || !page) return {};
-    
-    const { data, error } = await supabase
-        .from('page_content')
-        .select('*')
-        .eq('page', page)
-        .eq('tenant_id', tenantId);
-
-    if (error) {
-        console.error(`Error fetching content for page ${page}:`, error);
-        throw error;
-    }
-
-    const contentMap = data.reduce((acc, item) => {
-        if (!acc[item.section]) acc[item.section] = [];
-        acc[item.section].push(item);
-        return acc;
-    }, {});
-
-    Object.values(contentMap).forEach(sectionItems => {
-        sectionItems.sort((a, b) => a.position - b.position);
+const bffJson = async (path, { token, method = 'GET', body } = {}) => {
+    const res = await fetch(path, {
+        method,
+        headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: body ? JSON.stringify(body) : undefined,
     });
+    if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`${method} ${path} failed: ${res.status} ${text}`);
+    }
+    return res.json();
+};
 
+async function fetchSectionItems(token, tenantId, page, sectionId) {
+    const rows = await bffJson(`/api/admin/page-content?page=${encodeURIComponent(page)}&section=${encodeURIComponent(sectionId)}${tenantId !== undefined ? `&tenantId=${tenantId}` : ''}`, { token });
+    return (rows || []).map(item => {
+        let parsed;
+        try { parsed = typeof item.content === 'string' ? JSON.parse(item.content) : (item.content || {}); } catch { parsed = {}; }
+        return {
+            id: item.id,
+            page: item.page,
+            section: item.section || sectionId,
+            position: item.position,
+            is_active: true,
+            content: parsed,
+        };
+    });
+}
+
+const fetchPageContent = async (token, tenantId, page, sectionIds) => {
+    if (tenantId === undefined || !page || !Array.isArray(sectionIds) || sectionIds.length === 0) return {};
+    const results = await Promise.all(sectionIds.map(sec => fetchSectionItems(token, tenantId, page, sec).catch(() => [])));
+    const contentMap = {};
+    sectionIds.forEach((sec, idx) => {
+        const list = results[idx] || [];
+        list.sort((a, b) => a.position - b.position);
+        contentMap[sec] = list;
+    });
     return contentMap;
 };
 
-const fetchGameCategories = async (supabase) => {
-    if (!supabase) return [];
-    const { data, error } = await supabase
-        .from('page_content')
-        .select('content')
-        .eq('page', 'games')
-        .eq('section', 'game_categories')
-        .eq('tenant_id', 0); // Categories are global from main site
-    if (error) {
-        console.error("Failed to fetch game categories", error);
-        return [];
-    }
-    return data?.map(c => ({
-        value: c.content.slug,
-        label: c.content.name,
-    })) || [];
+const fetchGameCategories = async (token) => {
+    const res = await fetch('/api/page-content?page=games&section=game_categories');
+    if (!res.ok) return [];
+    const arr = await res.json();
+    return (arr || []).map(c => ({ value: c.slug || c.content?.slug, label: c.name || c.content?.name })).filter(x => x.value && x.label);
 };
 
-const fetchTenantInfo = async (supabase, tenantId) => {
-    if (!supabase || !tenantId || tenantId === 0) return null;
-    const { data, error } = await supabase
-        .from('tenant_requests')
-        .select('desired_domain, profile:profiles!user_id(username)')
-        .eq('id', tenantId)
-        .single();
-    if (error) {
-        console.error('Error fetching tenant info:', error);
-        return null;
-    }
-    return data;
+const fetchTenantInfo = async (_token, _tenantId) => {
+    return null;
 };
 
 const PageContentManager = () => {
     const navigate = useNavigate();
     const { tenantId: tenantIdFromUrl } = useParams();
-    const { isInitialized, isSuperAdmin, isTenantAdmin, supabase, userTenantId } = useAuth();
+    const { isInitialized, isSuperAdmin, isTenantAdmin, userTenantId, session } = useAuth();
+    const token = session?.access_token || null;
     const { activeTenantId: tenantIdFromContext } = useTenant();
     const queryClient = useQueryClient();
     const { toast } = useToast();
@@ -97,7 +95,7 @@ const PageContentManager = () => {
 
     useEffect(() => {
         let config = {};
-        if (isSuperAdmin || isTenantAdmin) { // Super admin or any tenant admin
+        if (isSuperAdmin || isTenantAdmin) {
             Object.entries(basePageConfig).forEach(([pageKey, pageData]) => {
                 const editableSections = pageData.sections.filter(s => isSuperAdmin || s.tenantEditable);
                 if (editableSections.length > 0) {
@@ -112,30 +110,33 @@ const PageContentManager = () => {
         }
     }, [isSuperAdmin, isTenantAdmin, activePage]);
 
+    const sectionIds = useMemo(() => (pageConfig[activePage]?.sections || []).map(s => s.id), [pageConfig, activePage]);
+    const sectionsKey = sectionIds.join(',');
+
     const { data: pageContent, isLoading: isContentLoading } = useQuery({
-        queryKey: ['pageContent', managedTenantId, activePage],
-        queryFn: () => fetchPageContent(supabase, managedTenantId, activePage),
-        enabled: isInitialized && managedTenantId !== undefined && !!activePage && !!supabase,
+        queryKey: ['pageContent', managedTenantId, activePage, sectionsKey, !!token],
+        queryFn: () => fetchPageContent(token, managedTenantId, activePage, sectionIds),
+        enabled: isInitialized && managedTenantId !== undefined && !!activePage && sectionIds.length > 0 && !!token,
     });
 
     const { data: categoryOptions } = useQuery({
         queryKey: ['gameCategories'],
-        queryFn: () => fetchGameCategories(supabase),
-        enabled: isInitialized && !!supabase,
+        queryFn: () => fetchGameCategories(token),
+        enabled: isInitialized,
         staleTime: Infinity,
     });
 
     const { data: managedTenantInfo } = useQuery({
         queryKey: ['tenantInfo', managedTenantId],
-        queryFn: () => fetchTenantInfo(supabase, managedTenantId),
-        enabled: isInitialized && !!managedTenantId && managedTenantId !== 0 && !!supabase,
+        queryFn: () => fetchTenantInfo(token, managedTenantId),
+        enabled: isInitialized && !!managedTenantId && managedTenantId !== 0,
     });
 
     const invalidateContentQueries = useCallback(() => {
-        queryClient.invalidateQueries({ queryKey: ['pageContent', managedTenantId, activePage] });
+        queryClient.invalidateQueries({ queryKey: ['pageContent', managedTenantId, activePage, sectionsKey, !!token] });
         queryClient.invalidateQueries({ queryKey: ['dashboardContent', managedTenantId] });
         queryClient.invalidateQueries({ queryKey: ['gamesData', managedTenantId] });
-    }, [queryClient, managedTenantId, activePage]);
+    }, [queryClient, managedTenantId, activePage, sectionsKey, token]);
 
     const handleFormSubmit = async (values, itemId) => {
         setIsSubmitting(true);
@@ -146,33 +147,34 @@ const PageContentManager = () => {
             page: activePage,
             section: activeSection,
             content: values,
-            is_active: editingItem?.is_active ?? true,
             position: position,
             tenant_id: managedTenantId
         };
 
-        const { error } = itemId
-            ? await supabase.from('page_content').update(contentData).eq('id', itemId)
-            : await supabase.from('page_content').insert([contentData]);
-
-        if (error) {
-            toast({ title: '保存失败', description: error.message, variant: 'destructive' });
-        } else {
+        try {
+            if (itemId) {
+                await bffJson(`/api/admin/page-content/${itemId}`, { token, method: 'PUT', body: { ...contentData, id: itemId } });
+            } else {
+                await bffJson('/api/admin/page-content', { token, method: 'POST', body: contentData });
+            }
             toast({ title: '保存成功', description: '内容已更新' });
             setIsFormOpen(false);
             setEditingItem(null);
             invalidateContentQueries();
+        } catch (e) {
+            toast({ title: '保存失败', description: e.message, variant: 'destructive' });
+        } finally {
+            setIsSubmitting(false);
         }
-        setIsSubmitting(false);
     };
 
     const handleDelete = async (id) => {
-        const { error } = await supabase.from('page_content').delete().eq('id', id);
-        if (error) {
-            toast({ title: '删除失败', description: error.message, variant: 'destructive' });
-        } else {
+        try {
+            await bffJson(`/api/admin/page-content/${id}?tenantId=${managedTenantId}`, { token, method: 'DELETE' });
             toast({ title: '删除成功' });
             invalidateContentQueries();
+        } catch (e) {
+            toast({ title: '删除失败', description: e.message, variant: 'destructive' });
         }
     };
 
@@ -185,23 +187,25 @@ const PageContentManager = () => {
         const currentItems = pageContent?.[section] || [];
         let currentMaxPosition = currentItems.length > 0 ? Math.max(...currentItems.map(i => i.position)) : -1;
 
-        const newItems = importedData.map((itemContent) => ({
-            page,
-            section,
-            content: itemContent,
-            is_active: true,
-            position: ++currentMaxPosition,
-            tenant_id: managedTenantId
-        }));
-
-        const { error } = await supabase.from('page_content').insert(newItems);
-        if (error) {
-            toast({ title: '批量导入失败', description: error.message, variant: 'destructive' });
-        } else {
-            toast({ title: '批量导入成功', description: `${newItems.length}个项目已添加。` });
+        try {
+            for (const itemContent of importedData) {
+                currentMaxPosition += 1;
+                const body = {
+                    page,
+                    section,
+                    content: itemContent,
+                    position: currentMaxPosition,
+                    tenant_id: managedTenantId,
+                };
+                await bffJson('/api/admin/page-content', { token, method: 'POST', body });
+            }
+            toast({ title: '批量导入成功', description: `${importedData.length}个项目已添加。` });
             invalidateContentQueries();
+        } catch (e) {
+            toast({ title: '批量导入失败', description: e.message, variant: 'destructive' });
+        } finally {
+            setIsSubmitting(false);
         }
-        setIsSubmitting(false);
     };
 
     const handleEdit = (item) => {

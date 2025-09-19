@@ -23,6 +23,8 @@ const NotificationIcon = ({ type }) => {
       return <div className="bg-blue-100 rounded-full p-2"><MessageCircle className="w-5 h-5 text-blue-500" /></div>;
     case 'system':
       return <div className="bg-purple-100 rounded-full p-2"><Info className="w-5 h-5 text-purple-500" /></div>;
+    case 'shop_redemption_update':
+      return <div className="bg-emerald-100 rounded-full p-2"><Info className="w-5 h-5 text-emerald-600" /></div>;
     default:
       return <div className="bg-yellow-100 rounded-full p-2"><Star className="w-5 h-5 text-yellow-500" /></div>;
   }
@@ -38,31 +40,27 @@ const NotificationSkeleton = () => (
   </div>
 );
 
-const fetchNotifications = async ({ pageParam = 0, userId }) => {
-  if (!userId) return { data: [], nextPage: undefined };
+async function bffFetch(path, { token, method = 'GET', body } = {}) {
+  const res = await fetch(path, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+  return res.json();
+}
 
-  const from = pageParam * NOTIFICATIONS_PER_PAGE;
-  const to = from + NOTIFICATIONS_PER_PAGE - 1;
-
-  const { data, error } = await supabase
-    .from('notifications')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .range(from, to);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return {
-    data,
-    nextPage: data.length === NOTIFICATIONS_PER_PAGE ? pageParam + 1 : undefined,
-  };
+const fetchNotifications = async ({ pageParam = 0, token }) => {
+  const data = await bffFetch(`/api/notifications?page=${pageParam}&size=${NOTIFICATIONS_PER_PAGE}`, { token });
+  return { data: data?.data || [], nextPage: data?.nextPage };
 };
 
 const Notifications = () => {
-  const { user, siteSettings } = useAuth();
+  const { user, siteSettings, session } = useAuth();
+  const token = session?.access_token || null;
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -78,9 +76,9 @@ const Notifications = () => {
     status,
   } = useInfiniteQuery({
     queryKey: ['notifications', user?.id],
-    queryFn: ({ pageParam }) => fetchNotifications({ pageParam, userId: user.id }),
+    queryFn: ({ pageParam }) => fetchNotifications({ pageParam, token }),
     getNextPageParam: (lastPage) => lastPage.nextPage,
-    enabled: !!user,
+    enabled: !!user && !!token,
   });
 
   React.useEffect(() => {
@@ -91,31 +89,23 @@ const Notifications = () => {
 
   const markAllAsReadMutation = useMutation({
     mutationFn: async () => {
-      if (!user) return;
-      const { error } = await supabase
-        .from('notifications')
-        .update({ is_read: true })
-        .eq('user_id', user.id)
-        .eq('is_read', false);
-      if (error) throw new Error(error.message);
+      if (!user || !token) return;
+      await bffFetch('/api/notifications/mark-read-all', { token, method: 'POST' });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['unreadNotificationsCount', user?.id] });
-      toast({ title: "所有通知已标记为已读" });
+      toast({ title: '所有通知已标记为已读' });
     },
     onError: (error) => {
-      toast({ title: "无法标记为已读", description: error.message, variant: 'destructive' });
+      toast({ title: '无法标记为已读', description: error.message, variant: 'destructive' });
     },
   });
 
   const markOneAsReadMutation = useMutation({
     mutationFn: async (notificationId) => {
-      const { error } = await supabase
-        .from('notifications')
-        .update({ is_read: true })
-        .eq('id', notificationId);
-      if (error) throw new Error(error.message);
+      if (!token) return;
+      await bffFetch(`/api/notifications/${notificationId}/mark-read`, { token, method: 'POST' });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
@@ -133,18 +123,35 @@ const Notifications = () => {
     }
   };
 
-  const getNotificationText = (notification) => {
-    switch(notification.type) {
-      case 'like':
-        return `${notification.content.liker_username} 点赞了你的帖子。`;
-      case 'comment':
-        return `${notification.content.commenter_username} 评论了: "${(notification.content.comment_content || '').substring(0, 50)}..."`;
-      case 'system':
-        return `系统通知: ${notification.content.message}`;
-      default:
-        return '你有一条新通知。';
+  const safeText = (v) => {
+    if (v == null) return '';
+    if (typeof v === 'string') {
+      const s = v.trim();
+      if (s === '[object Object]' || s === 'object Object' || s === 'Object object') return '';
+      return s;
     }
-  }
+    try { return JSON.stringify(v); } catch { return String(v); }
+  };
+
+  const getNotificationText = (notification) => {
+    const c = notification?.content || {};
+    const message = safeText(c?.message) || safeText(c?.title);
+    switch (notification?.type) {
+      case 'like':
+        return `${c?.liker_username || '有人'} 点赞了你的帖子。`;
+      case 'comment':
+        return `${c?.commenter_username || '有人'} 评论了: "${String(c?.comment_content || '').substring(0, 50)}..."`;
+      case 'system':
+        return message || '系统通知';
+      case 'shop_redemption_update': {
+        const base = message || `兑换状态更新${c?.product_name ? `：「${c.product_name}」` : ''}${c?.status_zh ? `（${c.status_zh}）` : ''}`;
+        const notes = safeText(c?.notes);
+        return notes ? `${base}（备注：${notes}）` : base;
+      }
+      default:
+        return message || '你有一条新通知。';
+    }
+  };
 
   const allNotifications = data?.pages.flatMap(page => page.data) ?? [];
 

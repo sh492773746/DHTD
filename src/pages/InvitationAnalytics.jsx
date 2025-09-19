@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { motion } from 'framer-motion';
-import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -10,7 +9,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Loader2, Search, ChevronDown, ChevronRight, User, Users } from 'lucide-react';
 import { useDebounce } from '@/hooks/useDebounce';
 import { Skeleton } from '@/components/ui/skeleton';
-import { fetchWithRetry } from '@/lib/api';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { useTenant } from '@/contexts/TenantContext';
 
@@ -20,33 +18,25 @@ const InvitationAnalytics = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedRows, setExpandedRows] = useState({});
   const { toast } = useToast();
-  const { siteSettings, isInitialized } = useAuth();
+  const { isInitialized, session } = useAuth();
   const { activeTenantId } = useTenant();
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
   const fetchInvitationStats = useCallback(async (searchUid) => {
     setLoading(true);
-    
-    // The RPC now respects the caller's context via RLS on the `profiles` table.
-    // So, we don't need to manually filter by tenant_id on the client.
-    let query = supabase.rpc('get_invitation_stats', {
-      search_uid: searchUid ? Number(searchUid) : null
-    });
-
-    const { data, error } = await fetchWithRetry(() => query);
-
-    if (error) {
-      toast({
-        variant: 'destructive',
-        title: '获取邀请统计失败',
-        description: error.message,
-      });
+    try {
+      const qs = searchUid ? `?uid=${encodeURIComponent(searchUid)}` : '';
+      const res = await fetch(`/api/admin/invitations/stats${qs}`, { headers: { Authorization: `Bearer ${session?.access_token || ''}` } });
+      if (!res.ok) throw new Error(`加载失败(${res.status})`);
+      const data = await res.json();
+      setStats(Array.isArray(data) ? data : []);
+    } catch (e) {
+      toast({ variant: 'destructive', title: '获取邀请统计失败', description: e.message || '网络错误' });
       setStats([]);
-    } else {
-      setStats(data || []);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  }, [toast]);
+  }, [toast, session?.access_token]);
 
   useEffect(() => {
     if (isInitialized) {
@@ -55,16 +45,10 @@ const InvitationAnalytics = () => {
   }, [debouncedSearchTerm, fetchInvitationStats, isInitialized, activeTenantId]);
 
   const toggleRow = (inviterId) => {
-    setExpandedRows(prev => ({
-      ...prev,
-      [inviterId]: !prev[inviterId]
-    }));
+    setExpandedRows(prev => ({ ...prev, [inviterId]: !prev[inviterId] }));
   };
 
-  const totalInvitedUsers = useMemo(() => {
-    return stats.reduce((acc, curr) => acc + (curr.invited_users_count || 0), 0);
-  }, [stats]);
-  
+  const totalInvitedUsers = useMemo(() => stats.reduce((acc, curr) => acc + (curr.invited_users_count || 0), 0), [stats]);
   const totalInviters = useMemo(() => stats.length, [stats]);
 
   return (
@@ -74,52 +58,38 @@ const InvitationAnalytics = () => {
         <meta name="description" content="查看和分析用户邀请数据" />
       </Helmet>
       <div>
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col md:flex-row justify-between md:items-center pb-6 border-b border-gray-200 gap-4"
-        >
+        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col md:flex-row justify-between md:items-center pb-6 border-b border-gray-200 gap-4">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-gray-900">邀请统计</h1>
             <p className="mt-1 text-sm text-gray-500">分析用户邀请关系和奖励情况。</p>
           </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              type="text"
-              placeholder="按邀请者或被邀请者UID搜索..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 w-full md:w-72 bg-white"
-            />
+            <Input type="text" placeholder="按邀请者或被邀请者UID搜索..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 w-full md:w-72 bg-white" />
           </div>
         </motion.div>
         
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 my-6">
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">总邀请人数</CardTitle>
-                    <Users className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold">{loading ? <Skeleton className="h-8 w-24" /> : totalInviters}</div>
-                    <p className="text-xs text-muted-foreground">
-                        有邀请记录的用户总数
-                    </p>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">总被邀请用户</CardTitle>
-                    <User className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold">{loading ? <Skeleton className="h-8 w-24" /> : totalInvitedUsers}</div>
-                     <p className="text-xs text-muted-foreground">
-                        通过邀请链接注册的用户总数
-                    </p>
-                </CardContent>
-            </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">总邀请人数</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{loading ? <Skeleton className="h-8 w-24" /> : totalInviters}</div>
+              <p className="text-xs text-muted-foreground">有邀请记录的用户总数</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">总被邀请用户</CardTitle>
+              <User className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{loading ? <Skeleton className="h-8 w-24" /> : totalInvitedUsers}</div>
+              <p className="text-xs text-muted-foreground">通过邀请链接注册的用户总数</p>
+            </CardContent>
+          </Card>
         </div>
 
         {loading ? (
@@ -127,12 +97,7 @@ const InvitationAnalytics = () => {
             <Loader2 className="h-12 w-12 animate-spin text-gray-400" />
           </div>
         ) : (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-            className="mt-8 bg-white rounded-lg border border-gray-200 overflow-hidden"
-          >
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="mt-8 bg-white rounded-lg border border-gray-200 overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow>

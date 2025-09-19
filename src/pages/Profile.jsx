@@ -20,9 +20,24 @@ import TenantRequestForm from './TenantRequestForm';
 import TenantInfo from '@/components/TenantInfo';
 import UserPostHistory from '@/components/UserPostHistory';
 
+async function bffFetchProfile(userId, token, ensure = true, scope) {
+  const url = `/api/profile?userId=${encodeURIComponent(userId)}&ensure=${ensure ? '1' : '0'}${scope ? `&scope=${encodeURIComponent(scope)}` : ''}`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`profile request failed: ${res.status}`);
+  return res.json();
+}
+
+function sameShanghaiDay(a, b) {
+  try {
+    const fmt = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' });
+    return fmt.format(a) === fmt.format(b);
+  } catch { return false; }
+}
 
 const Profile = () => {
-  const { user, profile: authProfile, loading: authLoading, signOut, isSuperAdmin, isTenantAdmin, tenantId, siteSettings, supabase: supabaseClient, refreshProfile } = useAuth();
+  const { user, profile: authProfile, loading: authLoading, signOut, isSuperAdmin, isTenantAdmin, tenantId, siteSettings, session, refreshProfile } = useAuth();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [managedTenantId, setManagedTenantId] = useState(null);
@@ -31,6 +46,8 @@ const Profile = () => {
   const { toast } = useToast();
   const isOwnProfile = !userId || (user && user.id === userId);
   const targetUserId = userId || user?.id;
+  const [checkinLoading, setCheckinLoading] = useState(false);
+  const [checkedInToday, setCheckedInToday] = useState(false);
 
   const fetchProfileData = useCallback(async () => {
     setLoading(true);
@@ -40,52 +57,79 @@ const Profile = () => {
       return;
     }
 
-    let currentProfile = null;
-    if (isOwnProfile && authProfile) {
-      currentProfile = authProfile;
-    } else {
-      if (!supabaseClient) {
-        setLoading(false);
-        return;
+    try {
+      let currentProfile = null;
+      if (isOwnProfile && authProfile) {
+        currentProfile = authProfile;
+      } else if (session?.access_token) {
+        currentProfile = await bffFetchProfile(targetUserId, session.access_token, false, isOwnProfile ? 'combined' : undefined);
       }
-      const { data, error } = await supabaseClient
-        .from('profiles')
-        .select('*')
-        .eq('id', targetUserId)
-        .single();
-      
-      if (error) {
-        console.error('Error fetching profile:', error);
-        toast({
-          title: '获取个人资料失败',
-          description: '无法加载用户数据。',
-          variant: 'destructive',
-        });
-        setLoading(false);
-        return;
-      }
-      currentProfile = data;
-    }
-    
-    setProfile(currentProfile);
 
-    if (isOwnProfile && (currentProfile?.role === 'admin' || isTenantAdmin)) {
-      const { data: tenantIdData, error: tenantIdError } = await supabaseClient.rpc('get_user_tenant_id', { p_user_id: targetUserId });
-      if (tenantIdError) {
-        console.error('Error fetching managed tenant id:', tenantIdError);
-      } else {
-        setManagedTenantId(tenantIdData);
+      if (!currentProfile) {
+        setLoading(false);
+        return;
       }
+
+      setProfile(currentProfile);
+
+      // managedTenantId 依赖 Supabase RPC，先跳过或后续用 BFF 提供
+      setManagedTenantId(null);
+    } catch (e) {
+      console.error('Error fetching profile:', e);
+      toast({
+        title: '获取个人资料失败',
+        description: '无法加载用户数据。',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
     }
-    
-    setLoading(false);
-  }, [targetUserId, isOwnProfile, authProfile, isTenantAdmin, supabaseClient, toast]);
+  }, [targetUserId, isOwnProfile, authProfile, session?.access_token, toast]);
 
   useEffect(() => {
     if (!authLoading) {
       fetchProfileData();
     }
   }, [authLoading, fetchProfileData]);
+
+  const refreshCheckinStatus = useCallback(async () => {
+    try {
+      if (!session?.access_token || !isOwnProfile) return;
+      const res = await fetch('/api/points/history', { headers: { Authorization: `Bearer ${session.access_token}` } });
+      if (!res.ok) return;
+      const list = await res.json();
+      const today = new Date();
+      const done = Array.isArray(list) && list.some(item => item?.reason === '每日签到' && item?.created_at && sameShanghaiDay(new Date(item.created_at), today));
+      setCheckedInToday(!!done);
+    } catch {}
+  }, [session?.access_token, isOwnProfile]);
+
+  useEffect(() => {
+    refreshCheckinStatus();
+  }, [refreshCheckinStatus]);
+
+  const handleDailyCheckin = async () => {
+    if (!session?.access_token) return;
+    setCheckinLoading(true);
+    try {
+      const res = await fetch('/api/points/checkin', { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}` } });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.ok) {
+        toast({ title: '签到成功', description: `获得 ${data.reward ?? 0} 积分` });
+        setCheckedInToday(true);
+        refreshProfile && refreshProfile();
+      } else if (data?.reason === 'already-done') {
+        toast({ title: '今日已签到', description: '明天再来～' });
+        setCheckedInToday(true);
+      } else {
+        toast({ variant: 'destructive', title: '签到失败', description: data?.error || `status ${res.status}` });
+      }
+    } catch (e) {
+      toast({ variant: 'destructive', title: '签到失败', description: e.message });
+    } finally {
+      setCheckinLoading(false);
+    }
+  };
 
   const handleCopyInviteLink = () => {
     const inviteLink = `${window.location.origin}/invite/${profile.invite_code}`;
@@ -129,6 +173,13 @@ const Profile = () => {
             </motion.div>
             <h1 className="text-2xl font-bold text-gray-800 mt-4">{profile.username}</h1>
             <p className="text-sm text-gray-500">UID: {profile.uid}</p>
+            {isOwnProfile && (
+              <div className="mt-3">
+                <Button size="sm" onClick={handleDailyCheckin} disabled={checkinLoading || checkedInToday} className="bg-green-600 hover:bg-green-700 text-white">
+                  {checkinLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> 签到中...</> : (checkedInToday ? '今日已签到' : '每日签到')}
+                </Button>
+              </div>
+            )}
           </CardHeader>
           <CardContent className="p-6 space-y-6">
             <div className="grid grid-cols-2 gap-4 text-center">

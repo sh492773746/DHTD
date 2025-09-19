@@ -86,7 +86,7 @@ const AdminLayout = () => {
                 <DropdownMenuLabel>{profile?.username || 'Admin'}</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => navigate('/profile')}>个人资料</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate('/admin/settings')}>设置</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/admin/site-settings')}>设置</DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="text-red-500 focus:text-red-500">
                   登出

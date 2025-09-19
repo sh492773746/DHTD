@@ -1,6 +1,5 @@
 import React, { useState, useCallback } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { supabase as supabaseClient } from '@/lib/customSupabaseClient';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -11,6 +10,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { Bell, Send, User, Users, Search, XCircle, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useAuth } from '@/contexts/SupabaseAuthContext';
 
 const AdminNotifications = () => {
   const [target, setTarget] = useState('all');
@@ -20,31 +20,27 @@ const AdminNotifications = () => {
   const [searching, setSearching] = useState(false);
   const [searchedUser, setSearchedUser] = useState(null);
   const { toast } = useToast();
+  const { session } = useAuth();
   
   const debouncedSearchTerm = useDebounce(uid, 500);
 
   const searchUserByUid = useCallback(async (searchUid) => {
-    if (!searchUid || searchUid.length < 8) {
+    if (!searchUid || searchUid.length < 6) {
       setSearchedUser(null);
       return;
     }
     setSearching(true);
-    const { data, error } = await supabaseClient
-      .from('profiles')
-      .select('id, uid, username, avatar_url, points')
-      .eq('uid', searchUid)
-      .single();
-
-    if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found
-      toast({
-        variant: 'destructive',
-        title: '搜索用户失败',
-        description: error.message,
-      });
-    }
-    setSearchedUser(data);
+    try {
+      const res = await fetch(`/api/admin/users`, { headers: { Authorization: `Bearer ${session?.access_token || ''}` } });
+      const list = await res.json();
+      const found = Array.isArray(list) ? list.find(u => String(u.uid || '').includes(searchUid)) : null;
+      setSearchedUser(found || null);
+    } catch (e) {
+      toast({ variant: 'destructive', title: '搜索用户失败', description: e.message || '网络错误' });
+    } finally {
     setSearching(false);
-  }, [toast]);
+    }
+  }, [toast, session?.access_token]);
 
   React.useEffect(() => {
     if (debouncedSearchTerm) {
@@ -68,24 +64,25 @@ const AdminNotifications = () => {
     }
     
     setLoading(true);
-
-    const { error } = await supabaseClient.rpc('send_system_notification', {
-      p_target_user_uid: target === 'all' ? null : searchedUser.uid,
-      p_content: content,
-    });
-
-    setLoading(false);
-
-    if (error) {
-      toast({ variant: 'destructive', title: '发送失败', description: error.message });
-    } else {
-      toast({
-        title: '发送成功',
-        description: `通知已成功发送给 ${target === 'all' ? '所有用户' : `用户 ${searchedUser.username}`}`,
+    try {
+      const res = await fetch('/api/admin/notifications/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
+        body: JSON.stringify({
+          content: { message: content, type: 'system' },
+          target: target === 'all' ? 'all' : 'user',
+          uid: target === 'all' ? undefined : searchedUser?.uid,
+        })
       });
+      if (!res.ok) throw new Error(`发送失败(${res.status})`);
+      toast({ title: '发送成功', description: `通知已发送给 ${target === 'all' ? '所有用户' : `用户 ${searchedUser.username}`}` });
       setContent('');
       setUid('');
       setSearchedUser(null);
+    } catch (e) {
+      toast({ variant: 'destructive', title: '发送失败', description: e.message || '网络错误' });
+    } finally {
+      setLoading(false);
     }
   };
   
@@ -145,7 +142,7 @@ const AdminNotifications = () => {
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                       <Input
                         id="uid"
-                        placeholder="输入用户的8位UID进行搜索..."
+                        placeholder="输入用户的UID进行搜索..."
                         value={uid}
                         onChange={(e) => setUid(e.target.value.replace(/[^0-9]/g, '').slice(0, 8))}
                         className="pl-10"

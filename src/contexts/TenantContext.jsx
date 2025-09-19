@@ -25,7 +25,7 @@ export const TenantProvider = ({ children }) => {
     };
 
     identifyTenant();
-  }, [logTenantInfo]); 
+  }, []); 
   
   const value = useMemo(() => ({
       activeTenantId,

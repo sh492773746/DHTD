@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { motion } from 'framer-motion';
-import { Users, FileText, Eye, TrendingDown } from 'lucide-react';
+import { Users, FileText } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
-import { fetchWithRetry } from '@/lib/api';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
-import { format, subDays, eachDayOfInterval } from 'date-fns';
+import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { useQuery } from '@tanstack/react-query';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -48,79 +47,35 @@ const RecentActivityItem = ({ avatar, name, email }) => (
   </div>
 );
 
-const fetchDashboardData = async (supabaseClient, period) => {
-  if (!supabaseClient) return null;
-
-  const endDate = new Date();
-  let startDate;
-  switch (period) {
-    case 'today':
-      startDate = subDays(endDate, 0);
-      break;
-    case '3d':
-      startDate = subDays(endDate, 2);
-      break;
-    case '7d':
-      startDate = subDays(endDate, 6);
-      break;
-    case '30d':
-    default:
-      startDate = subDays(endDate, 29);
-      break;
-  }
-
-  const [usersRes, postsRes, recentUsersRes] = await Promise.all([
-    supabaseClient.from('profiles').select('created_at', { count: 'exact' }),
-    supabaseClient.from('posts').select('created_at', { count: 'exact' }),
-    supabaseClient.from('profiles').select('username, avatar_url, created_at').order('created_at', { ascending: false }).limit(5),
-  ]);
-
-  if (usersRes.error || postsRes.error || recentUsersRes.error) {
-    console.error('Error fetching dashboard data:', {
-      usersError: usersRes.error,
-      postsError: postsRes.error,
-      recentUsersError: recentUsersRes.error,
-    });
-    throw new Error('Failed to fetch dashboard data');
-  }
-
-  const dailyData = eachDayOfInterval({ start: startDate, end: endDate }).reduce((acc, date) => {
-    const formattedDate = format(date, 'yyyy-MM-dd');
-    acc[formattedDate] = { users: 0, posts: 0 };
-    return acc;
-  }, {});
-
-  usersRes.data.forEach(user => {
-    const date = format(new Date(user.created_at), 'yyyy-MM-dd');
-    if (dailyData[date]) dailyData[date].users++;
-  });
-
-  postsRes.data.forEach(post => {
-    const date = format(new Date(post.created_at), 'yyyy-MM-dd');
-    if (dailyData[date]) dailyData[date].posts++;
-  });
-
-  return {
-    totalUsers: usersRes.count,
-    totalPosts: postsRes.count,
-    recentUsers: recentUsersRes.data,
-    dailyData,
-  };
-};
+async function fetchStats() {
+  const res = await fetch('/api/stats');
+  if (!res.ok) throw new Error('failed');
+  return res.json();
+}
 
 const AdminDashboard = () => {
-  const { supabase: supabaseClient } = useAuth();
   const [period, setPeriod] = useState('30d');
+  const { session } = useAuth();
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['dashboardData', period],
-    queryFn: () => fetchDashboardData(supabaseClient, period),
-    enabled: !!supabaseClient,
+  const { data, isLoading } = useQuery({
+    queryKey: ['dashboardData'],
+    queryFn: () => fetchStats(),
+  });
+
+  const { data: recentUsers, isLoading: isLoadingRecent } = useQuery({
+    queryKey: ['recentUsers', session?.access_token],
+    queryFn: async () => {
+      const res = await fetch('/api/admin/users', { headers: { Authorization: `Bearer ${session?.access_token || ''}` } });
+      if (!res.ok) throw new Error('failed');
+      const list = await res.json();
+      const sorted = Array.isArray(list) ? list.slice().sort((a, b) => new Date(b.created_at || b.createdAt) - new Date(a.created_at || a.createdAt)) : [];
+      return sorted.slice(0, 5);
+    },
+    enabled: !!session?.access_token,
   });
 
   const chartData = useMemo(() => {
     if (!data?.dailyData) return { labels: [], datasets: [] };
-
     const labels = Object.keys(data.dailyData).map(date => format(new Date(date), 'M/d'));
     return {
       labels,
@@ -149,50 +104,12 @@ const AdminDashboard = () => {
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
-    interaction: {
-      mode: 'index',
-      intersect: false,
-    },
-    plugins: {
-      legend: {
-        position: 'top',
-      },
-      tooltip: {
-        backgroundColor: '#fff',
-        titleColor: '#333',
-        bodyColor: '#666',
-        borderColor: '#ddd',
-        borderWidth: 1,
-      }
-    },
+    interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { position: 'top' } },
     scales: {
-      x: {
-        grid: { display: false },
-      },
-      y: {
-        type: 'linear',
-        display: true,
-        position: 'left',
-        title: {
-          display: true,
-          text: '新增用户数',
-        },
-        grid: {
-          drawOnChartArea: false,
-        },
-      },
-      y1: {
-        type: 'linear',
-        display: true,
-        position: 'right',
-        title: {
-          display: true,
-          text: '新增帖子数',
-        },
-        grid: {
-          drawOnChartArea: false,
-        },
-      },
+      x: { grid: { display: false } },
+      y: { type: 'linear', position: 'left', title: { display: true, text: '新增用户数' }, grid: { drawOnChartArea: false } },
+      y1: { type: 'linear', position: 'right', title: { display: true, text: '新增帖子数' }, grid: { drawOnChartArea: false } },
     },
   };
 
@@ -202,12 +119,7 @@ const AdminDashboard = () => {
         <title>仪表盘 - 管理后台</title>
         <meta name="description" content="管理后台仪表盘" />
       </Helmet>
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="space-y-8 overflow-x-auto"
-      >
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="space-y-8 overflow-x-auto">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight">仪表盘</h1>
@@ -248,12 +160,10 @@ const AdminDashboard = () => {
           <Card className="lg:col-span-3">
             <CardHeader>
               <CardTitle>近期注册</CardTitle>
-              <CardDescription>
-                最新加入的 5 位用户。
-              </CardDescription>
+              <CardDescription>最新加入的 5 位用户。</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {isLoading ? (
+              {isLoadingRecent ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <div key={i} className="flex items-center">
                     <Skeleton className="h-9 w-9 rounded-full" />
@@ -264,12 +174,12 @@ const AdminDashboard = () => {
                   </div>
                 ))
               ) : (
-                data?.recentUsers?.map(user => (
+                (recentUsers || []).map(u => (
                   <RecentActivityItem
-                    key={user.created_at}
-                    avatar={user.avatar_url}
-                    name={user.username}
-                    email={`注册于 ${format(new Date(user.created_at), 'PPP', { locale: zhCN })}`}
+                    key={u.id}
+                    avatar={u.avatar_url}
+                    name={u.username}
+                    email={`注册于 ${u.created_at ? format(new Date(u.created_at), 'PPP', { locale: zhCN }) : '-'}`}
                   />
                 ))
               )}

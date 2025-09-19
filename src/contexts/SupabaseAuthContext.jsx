@@ -11,7 +11,7 @@ const AuthContext = createContext(undefined);
 const fetchSiteSettings = async (currentTenantId) => {
   if (currentTenantId === undefined || currentTenantId === null) return {};
   try {
-    const res = await fetch('/api/settings');
+    const res = await fetch(`/api/settings?t=${Date.now()}`);
     if (!res.ok) return {};
     const map = await res.json();
     return map || {};
@@ -33,38 +33,40 @@ const fetchMainSiteSettings = async () => {
     }
 };
 
-const fetchProfile = async (userId) => {
-    if (!userId) return null;
-    const { data, error } = await fetchWithRetry(() => supabaseClient
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single());
-
-    if (error && error.code !== 'PGRST116') { // PGRST116: no rows returned
-        console.error("Error fetching profile:", error);
-        throw error;
-    }
-    return data;
+const fetchProfile = async (userId, token) => {
+  if (!userId || !token) return null;
+  const res = await fetch(`/api/profile?userId=${encodeURIComponent(userId)}&ensure=1`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`profile fetch failed: ${res.status} ${text}`);
+  }
+  return await res.json();
 }
 
-const checkSuperAdmin = async (userId) => {
-    if (!userId) return false;
-    const { data, error } = await fetchWithRetry(() => supabaseClient.rpc('is_admin', { p_user_id: userId }));
-    if (error) {
-        console.error("Error checking super admin status:", error);
-        return false;
-    }
-    return data;
+const checkSuperAdmin = async (token) => {
+  if (!token) return false;
+  try {
+    const res = await fetch('/api/admin/is-super-admin', { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) return false;
+    const j = await res.json();
+    return !!j?.isSuperAdmin;
+  } catch {
+    return false;
+  }
 };
 
-const fetchTenantAdmins = async (userId) => {
-    if (!userId) return [];
-    const { data } = await fetchWithRetry(() => supabaseClient
-        .from('tenant_admins')
-        .select('tenant_id')
-        .eq('user_id', userId));
-    return data || [];
+const fetchTenantAdmins = async (token) => {
+  if (!token) return [];
+  try {
+    const res = await fetch('/api/admin/tenant-admins', { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) return [];
+    const arr = await res.json();
+    return Array.isArray(arr) ? arr.map(id => ({ tenant_id: id })) : [];
+  } catch {
+    return [];
+  }
 };
 
 export const AuthProvider = ({ children }) => {
@@ -80,21 +82,21 @@ export const AuthProvider = ({ children }) => {
   const [connectionError, setConnectionError] = useState(null);
   
   const { data: profile, isLoading: isProfileLoading } = useQuery({
-      queryKey: ['profile', user?.id],
-      queryFn: () => fetchProfile(user?.id),
-      enabled: sessionLoaded && !!user,
+      queryKey: ['profile', user?.id, session?.access_token],
+      queryFn: () => fetchProfile(user?.id, session?.access_token),
+      enabled: sessionLoaded && !!user && !!session?.access_token,
   });
 
   const { data: isSuperAdmin, isLoading: isSuperAdminLoading } = useQuery({
-      queryKey: ['isSuperAdmin', user?.id],
-      queryFn: () => checkSuperAdmin(user?.id),
-      enabled: sessionLoaded && !!user,
+      queryKey: ['isSuperAdmin', session?.access_token],
+      queryFn: () => checkSuperAdmin(session?.access_token),
+      enabled: sessionLoaded && !!session?.access_token,
   });
   
   const { data: tenantAdminData, isLoading: isTenantAdminLoading } = useQuery({
-      queryKey: ['tenantAdmin', user?.id],
-      queryFn: () => fetchTenantAdmins(user?.id),
-      enabled: sessionLoaded && !!user,
+      queryKey: ['tenantAdmin', session?.access_token],
+      queryFn: () => fetchTenantAdmins(session?.access_token),
+      enabled: sessionLoaded && !!session?.access_token,
   });
 
   const isTenantAdmin = tenantAdminData && tenantAdminData.length > 0;

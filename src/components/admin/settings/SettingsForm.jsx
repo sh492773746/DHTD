@@ -7,9 +7,24 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import ImageUploader from '@/components/ImageUploader';
 
+const HIDDEN_KEYS = new Set(['global_obfuscate_text_enabled']);
+
 const SettingsForm = ({ settings, onInputChange, onRevertToDefault, isSuperAdmin, isManagingSubTenant, tenantEditableKeys }) => {
   const renderSettingInput = (key, setting) => {
     const { value, type } = setting;
+    if (key === 'social_forum_mode') {
+      const mode = (value || 'shared').toLowerCase();
+      return (
+        <div className="flex items-center gap-3">
+          <span className={mode === 'isolated' ? 'font-semibold' : 'text-muted-foreground'}>独享</span>
+          <Switch
+            checked={mode === 'shared'}
+            onCheckedChange={(checked) => onInputChange(key, checked ? 'shared' : 'isolated')}
+          />
+          <span className={mode === 'shared' ? 'font-semibold' : 'text-muted-foreground'}>共享</span>
+        </div>
+      );
+    }
     switch (type) {
       case 'boolean':
         return <Switch checked={value === 'true' || value === true} onCheckedChange={(val) => onInputChange(key, val.toString())} />;
@@ -22,7 +37,7 @@ const SettingsForm = ({ settings, onInputChange, onRevertToDefault, isSuperAdmin
     }
   };
 
-  const allSettingKeys = Object.keys(settings).sort();
+  const allSettingKeys = Object.keys(settings).filter(k => !HIDDEN_KEYS.has(k)).sort();
 
   const settingsToDisplay = isSuperAdmin 
     ? allSettingKeys

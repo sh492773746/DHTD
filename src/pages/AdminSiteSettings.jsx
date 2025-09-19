@@ -12,37 +12,39 @@ import SettingsHeader from '@/components/admin/settings/SettingsHeader';
 import SettingsForm from '@/components/admin/settings/SettingsForm';
 import BulkImportDialog from '@/components/admin/settings/BulkImportDialog';
 
-const fetchTenantSettingsWithFallback = async (supabase, tenantId) => {
-    if (!supabase || tenantId === undefined || tenantId === null) return [];
-    
-    const { data, error } = await supabase.rpc('get_tenant_settings_with_fallback', { p_tenant_id: tenantId });
-
-    if (error) {
-        console.error('Error fetching settings with fallback:', error);
-        throw error;
+const bffJson = async (path, { token, method = 'GET', body } = {}) => {
+    const res = await fetch(path, {
+        method,
+        headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`${method} ${path} failed: ${res.status} ${text}`);
     }
-    return data || [];
+    try { return await res.json(); } catch { return {}; }
 };
 
-const fetchTenantInfo = async (supabase, tenantId) => {
-    if (!supabase || !tenantId || tenantId === 0) return null;
-    const { data, error } = await supabase
-        .from('tenant_requests')
-        .select('desired_domain, profile:profiles!user_id(username)')
-        .eq('id', tenantId)
-        .single();
-    if (error) {
-        console.error('Error fetching tenant info:', error);
-        return null;
-    }
-    return data;
+const fetchTenantSettingsBff = async (token, tenantId) => {
+    if (tenantId === undefined || tenantId === null) return [];
+    const rows = await bffJson(`/api/admin/settings${tenantId !== undefined ? `?tenantId=${tenantId}` : ''}`, { token });
+    return rows || [];
+};
+
+const fetchTenantInfoBff = async (token, tenantId) => {
+    // We can reuse /api/admin/tenants listing if needed, but keep current UI simple
+    return null;
 };
 
 const AdminSiteSettings = () => {
     const { toast } = useToast();
     const navigate = useNavigate();
     const queryClient = useQueryClient();
-    const { supabase, isSuperAdmin, userTenantId, isInitialized, isTenantAdmin } = useAuth();
+    const { isSuperAdmin, userTenantId, isInitialized, isTenantAdmin, session, refreshSiteSettings } = useAuth();
+    const token = session?.access_token || null;
     const { activeTenantId: tenantIdFromContext } = useTenant();
 
     const [settings, setSettings] = useState({});
@@ -58,23 +60,24 @@ const AdminSiteSettings = () => {
     }, [tenantIdFromContext, isSuperAdmin, userTenantId]);
 
     const { data: allSettings, isLoading } = useQuery({
-        queryKey: ['adminTenantSettings', managedTenantId],
-        queryFn: () => fetchTenantSettingsWithFallback(supabase, managedTenantId),
-        enabled: isInitialized && managedTenantId !== undefined,
+        queryKey: ['adminTenantSettings', managedTenantId, !!token],
+        queryFn: () => fetchTenantSettingsBff(token, managedTenantId),
+        enabled: isInitialized && managedTenantId !== undefined && !!token,
     });
 
     const { data: managedTenantInfo } = useQuery({
-        queryKey: ['tenantInfo', managedTenantId],
-        queryFn: () => fetchTenantInfo(supabase, managedTenantId),
-        enabled: isInitialized && !!managedTenantId && managedTenantId !== 0,
+        queryKey: ['tenantInfo', managedTenantId, !!token],
+        queryFn: () => fetchTenantInfoBff(token, managedTenantId),
+        enabled: isInitialized && !!managedTenantId && managedTenantId !== 0 && !!token,
     });
     
     const tenantEditableKeys = ['site_name', 'site_description', 'site_logo'];
 
     useEffect(() => {
         if (allSettings) {
-            const settingsMap = allSettings.reduce((acc, setting) => {
-                acc[setting.key] = { ...setting };
+            const settingsMap = (allSettings || []).reduce((acc, setting) => {
+                // normalize is_custom flag for UI
+                acc[setting.key] = { ...setting, is_custom: Number(setting.tenant_id ?? setting.tenantId) !== 0 };
                 return acc;
             }, {});
             setSettings(settingsMap);
@@ -90,53 +93,45 @@ const AdminSiteSettings = () => {
     
     const handleRevertToDefault = async (key) => {
         setIsSaving(true);
-        const { error } = await supabase
-            .from('app_settings')
-            .delete()
-            .eq('tenant_id', managedTenantId)
-            .eq('key', key);
-        
-        if (error) {
-            toast({ title: '恢复默认失败', description: error.message, variant: 'destructive' });
-        } else {
+        try {
+            await bffJson(`/api/admin/settings/${encodeURIComponent(key)}?tenantId=${managedTenantId}`, { token, method: 'DELETE' });
             toast({ title: '恢复默认成功', description: '设置已恢复为默认值。' });
-            queryClient.invalidateQueries({ queryKey: ['adminTenantSettings', managedTenantId] });
+            queryClient.invalidateQueries({ queryKey: ['adminTenantSettings', managedTenantId, !!token] });
+        } catch (e) {
+            toast({ title: '恢复默认失败', description: e.message, variant: 'destructive' });
+        } finally {
+            setIsSaving(false);
         }
-        setIsSaving(false);
     };
 
     const handleSaveChanges = async () => {
         setIsSaving(true);
-        
-        const settingsToUpsert = Object.entries(settings)
+        const updates = Object.entries(settings)
             .filter(([_, setting]) => setting.isCustom)
             .map(([key, setting]) => ({
-                tenant_id: managedTenantId,
                 key,
-                value: String(setting.value),
+                value: String(setting.value ?? ''),
                 name: setting.name,
                 description: setting.description,
                 type: setting.type,
             }));
-            
-        if (settingsToUpsert.length > 0) {
-            const { error } = await supabase.from('app_settings').upsert(settingsToUpsert, {
-                onConflict: 'key, tenant_id',
-            });
 
-            if (error) {
-                toast({ title: '保存失败', description: error.message, variant: 'destructive' });
-            } else {
+        try {
+            if (updates.length > 0) {
+                await bffJson('/api/admin/settings', { token, method: 'POST', body: { tenantId: managedTenantId, updates } });
                 toast({ title: '保存成功', description: '站点设置已更新。' });
+            } else {
+                toast({ title: '无需保存', description: '没有检测到任何更改。' });
             }
-        } else {
-            toast({ title: '无需保存', description: '没有检测到任何更改。' });
+        } catch (e) {
+            toast({ title: '保存失败', description: e.message, variant: 'destructive' });
+        } finally {
+            queryClient.invalidateQueries({ queryKey: ['adminTenantSettings', managedTenantId, !!token] });
+            queryClient.invalidateQueries({ queryKey: ['siteSettings', managedTenantId] });
+            queryClient.invalidateQueries({ queryKey: ['siteSettings', 0]});
+            try { refreshSiteSettings && refreshSiteSettings(); } catch {}
+            setIsSaving(false);
         }
-        
-        queryClient.invalidateQueries({ queryKey: ['adminTenantSettings', managedTenantId] });
-        queryClient.invalidateQueries({ queryKey: ['siteSettings', managedTenantId] });
-        queryClient.invalidateQueries({ queryKey: ['siteSettings', 0]}); // Invalidate main site settings too
-        setIsSaving(false);
     };
 
     const handleBulkImport = async () => {
@@ -145,7 +140,6 @@ const AdminSiteSettings = () => {
             if (typeof parsedJson !== 'object' || parsedJson === null || Array.isArray(parsedJson)) {
                 throw new Error("JSON必须是一个对象。");
             }
-            
             const updatedSettings = { ...settings };
             let updatedCount = 0;
             for (const key in parsedJson) {
@@ -164,7 +158,6 @@ const AdminSiteSettings = () => {
             toast({ title: "导入成功", description: `已从JSON更新 ${updatedCount} 个设置项。请点击保存以生效。`});
             setBulkImportOpen(false);
             setBulkJson('');
-
         } catch (error) {
             toast({ title: "JSON导入失败", description: error.message, variant: "destructive" });
         }
@@ -177,7 +170,6 @@ const AdminSiteSettings = () => {
                 acc[key] = setting.value;
                 return acc;
             }, {});
-        
         const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
             JSON.stringify(customSettings, null, 2)
         )}`;

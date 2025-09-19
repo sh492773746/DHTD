@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import { Input } from '@/components/ui/input';
@@ -8,8 +7,25 @@ import { Button } from '@/components/ui/button';
 import { Globe, MessageSquare, Send, Loader2, CheckCircle, XCircle, Search } from 'lucide-react';
 import { useDebounce } from '@/hooks/useDebounce';
 
+async function bffJson(path, { token, method = 'GET', body } = {}) {
+  const res = await fetch(path, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`${method} ${path} failed: ${res.status} ${text}`);
+  }
+  return res.json();
+}
+
 const TenantRequestForm = ({ onSuccess, isAdminCreation = false }) => {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
+  const token = session?.access_token || null;
   const { toast } = useToast();
   const [desiredDomain, setDesiredDomain] = useState('');
   const [contactWangWang, setContactWangWang] = useState('');
@@ -30,11 +46,8 @@ const TenantRequestForm = ({ onSuccess, isAdminCreation = false }) => {
     setIsCheckingDomain(true);
     setDomainAvailability(null);
     try {
-      const { data, error } = await supabase.functions.invoke('check-domain-availability', {
-        body: JSON.stringify({ domain: debouncedDomain }),
-      });
-      if (error) throw error;
-      if (data.available) {
+      const data = await bffJson(`/api/admin/tenant-requests/check-domain?domain=${encodeURIComponent(debouncedDomain)}`, { token });
+      if (data?.available) {
         setDomainAvailability('available');
       } else {
         setDomainAvailability('unavailable');
@@ -44,12 +57,12 @@ const TenantRequestForm = ({ onSuccess, isAdminCreation = false }) => {
       toast({
         variant: 'destructive',
         title: '域名检查失败',
-        description: error.message || '无法连接到域名服务，请稍后重试。',
+        description: error.message || '无法连接到服务，请稍后重试。',
       });
     } finally {
       setIsCheckingDomain(false);
     }
-  }, [debouncedDomain, toast]);
+  }, [debouncedDomain, toast, token]);
 
   useEffect(() => {
     if (debouncedDomain) {
@@ -68,13 +81,19 @@ const TenantRequestForm = ({ onSuccess, isAdminCreation = false }) => {
       }
 
       setLoading(true);
-      const { data, error } = await supabase.from('profiles').select('*').eq('uid', searchUid).single();
-      if (error || !data) {
+      try {
+        const list = await bffJson('/api/admin/users', { token });
+        const found = (list || []).find(u => String(u.uid) === String(searchUid));
+        if (!found) {
           toast({ title: '用户未找到', description: `未找到 UID 为 ${searchUid} 的用户`, variant: 'destructive'});
           setSearchedUser(null);
-      } else {
-          setSearchedUser(data);
-          setTargetUserId(data.id);
+        } else {
+          setSearchedUser(found);
+          setTargetUserId(found.id);
+        }
+      } catch (e) {
+        toast({ title: '用户未找到', description: `未找到 UID 为 ${searchUid} 的用户`, variant: 'destructive'});
+        setSearchedUser(null);
       }
       setLoading(false);
   }
@@ -93,26 +112,23 @@ const TenantRequestForm = ({ onSuccess, isAdminCreation = false }) => {
 
     const userIdToSubmit = isAdminCreation ? targetUserId : user.id;
 
-    const { error } = await supabase.from('tenant_requests').insert({
-      user_id: userIdToSubmit,
-      desired_domain: desiredDomain,
-      contact_wangwang: contactWangWang,
-      status: 'pending',
-    });
+    try {
+      await bffJson('/api/admin/tenant-requests', { token, method: 'POST', body: { targetUserId: userIdToSubmit, desiredDomain, contactWangWang } });
+    } catch (error) {
+      setLoading(false);
+      toast({ variant: 'destructive', title: '提交申请失败', description: error.message });
+      return;
+    }
 
     setLoading(false);
 
-    if (error) {
-      toast({ variant: 'destructive', title: '提交申请失败', description: error.message });
-    } else {
-      toast({ title: '申请已提交', description: '分站申请已成功提交，请等待管理员审核。' });
-      setDesiredDomain('');
-      setContactWangWang('');
-      setSearchUid('');
-      setSearchedUser(null);
-      setDomainAvailability(null);
-      if (onSuccess) onSuccess();
-    }
+    toast({ title: '申请已提交', description: '分站申请已成功提交，请等待管理员审核。' });
+    setDesiredDomain('');
+    setContactWangWang('');
+    setSearchUid('');
+    setSearchedUser(null);
+    setDomainAvailability(null);
+    if (onSuccess) onSuccess();
   };
 
   const renderDomainStatus = () => {

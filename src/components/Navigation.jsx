@@ -40,43 +40,67 @@ const ThemeToggle = () => {
   );
 };
 
+async function bffFetch(path, { token } = {}) {
+  const res = await fetch(path, {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  if (!res.ok) return { items: [], count: 0 };
+  return res.json();
+}
+
+function safeText(v) {
+  if (v == null) return '';
+  if (typeof v === 'string') {
+    const s = v.trim();
+    if (s === '[object Object]' || s === 'object Object' || s === 'Object object') return '';
+    return s;
+  }
+  try { return JSON.stringify(v); } catch { return String(v); }
+}
+
+function renderNotificationSummary(n) {
+  const c = n?.content || {};
+  const msg = safeText(c?.message) || safeText(c?.title);
+  switch (n?.type) {
+    case 'like':
+      return `${c?.liker_username || '有人'} 点赞了你的帖子。`;
+    case 'comment':
+      return `${c?.commenter_username || '有人'} 评论了: "${String(c?.comment_content || '').substring(0, 50)}..."`;
+    case 'shop_redemption_update': {
+      const name = c?.product_name ? `：「${c.product_name}」` : '';
+      const status = c?.status_zh ? `（${c.status_zh}）` : '';
+      const base = msg || `兑换状态更新${name}${status}`;
+      const notes = safeText(c?.notes);
+      return notes ? `${base}（备注：${notes}）` : base;
+    }
+    case 'system':
+      return msg || '系统通知';
+    default:
+      return msg || '新的通知';
+  }
+}
+
 const Navigation = () => {
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { user, profile, signOut, siteSettings, supabase } = useAuth();
+  const { user, profile, signOut, siteSettings, session } = useAuth();
+  const token = session?.access_token || null;
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
-    if (user && supabase) {
+    if (user && token) {
       const fetchNotifications = async () => {
-        const { data, count } = await supabase
-          .from('notifications')
-          .select('*', { count: 'exact' })
-          .eq('user_id', user.id)
-          .eq('is_read', false)
-          .order('created_at', { ascending: false })
-          .limit(5);
-
-        setNotifications(data || []);
-        setUnreadCount(count || 0);
+        const data = await bffFetch('/api/notifications/unread', { token });
+        setNotifications(data?.items || []);
+        setUnreadCount(data?.count || 0);
       };
 
       fetchNotifications();
-      
-      const channel = supabase.channel(`notifications:${user.id}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, 
-          (payload) => {
-            fetchNotifications();
-          }
-        )
-        .subscribe();
-      
-      return () => {
-        supabase.removeChannel(channel);
-      };
     }
-  }, [user, supabase]);
+  }, [user, token]);
 
   const handleLogout = async () => {
     await signOut();
@@ -134,8 +158,8 @@ const Navigation = () => {
                       notifications.map(notification => (
                         <DropdownMenuItem key={notification.id} className="flex items-start gap-3 p-2 cursor-pointer focus:bg-accent">
                           <div>
-                             <p className="text-sm">{(notification.content)?.message || '新的通知'}</p>
-                             <p className="text-xs text-muted-foreground">{new Date(notification.created_at).toLocaleString()}</p>
+                            <p className="text-sm">{renderNotificationSummary(notification)}</p>
+                            <p className="text-xs text-muted-foreground">{new Date(notification.created_at).toLocaleString()}</p>
                           </div>
                         </DropdownMenuItem>
                       ))

@@ -15,7 +15,7 @@ const MAX_IMAGE_SIZE_MB = 5;
 const MAX_IMAGE_COUNT = 9;
 
 const CreatePost = ({ isOpen, setIsOpen, onPostCreated, tenantId }) => {
-    const { supabase, user, profile, siteSettings, refreshProfile } = useAuth();
+    const { user, profile, siteSettings, refreshProfile, session } = useAuth();
     const { toast } = useToast();
     const [content, setContent] = useState('');
     const [isAd, setIsAd] = useState(false);
@@ -53,11 +53,7 @@ const CreatePost = ({ isOpen, setIsOpen, onPostCreated, tenantId }) => {
 
         const validFiles = files.filter(file => {
             if (file.size > MAX_IMAGE_SIZE_MB * 1024 * 1024) {
-                toast({
-                    variant: 'destructive',
-                    title: `图片太大: ${file.name}`,
-                    description: `单张图片不能超过 ${MAX_IMAGE_SIZE_MB}MB。`
-                });
+                toast({ variant: 'destructive', title: `图片太大: ${file.name}`, description: `单张图片不能超过 ${MAX_IMAGE_SIZE_MB}MB。` });
                 return false;
             }
             return true;
@@ -87,28 +83,80 @@ const CreatePost = ({ isOpen, setIsOpen, onPostCreated, tenantId }) => {
         setUploadProgress({});
     };
 
-    const uploadImages = async () => {
-        const uploadedUrls = [];
-        for (let i = 0; i < imageFiles.length; i++) {
-            const file = imageFiles[i];
-            const fileName = `${user.id}/${Date.now()}_${file.name}`;
-            const { data, error } = await supabase.storage
-                .from('post-images')
-                .upload(fileName, file, {
-                    cacheControl: '3600',
-                    upsert: false
-                });
-
-             if (error) {
-                throw new Error(`图片上传失败: ${error.message}`);
+    // Resumable upload helpers
+    const CHUNK_SIZE = 1024 * 1024; // 1MB
+    const initResumable = async (filename) => {
+        const res = await fetch('/api/uploads/resumable/init', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
+            body: JSON.stringify({ filename })
+        });
+        if (!res.ok) throw new Error('初始化上传会话失败');
+        const j = await res.json();
+        return j.uploadId;
+    };
+    const uploadChunk = async (uploadId, index, total, blob) => {
+        const fd = new FormData();
+        fd.append('uploadId', uploadId);
+        fd.append('index', String(index));
+        fd.append('total', String(total));
+        fd.append('chunk', new File([blob], `chunk_${index}`));
+        const res = await fetch('/api/uploads/resumable/chunk', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${session?.access_token || ''}` },
+            body: fd
+        });
+        if (!res.ok) throw new Error('分片上传失败');
+        return res.json();
+    };
+    const uploadChunkWithRetry = async (uploadId, index, total, blob, attempt = 0) => {
+        try {
+            return await uploadChunk(uploadId, index, total, blob);
+        } catch (e) {
+            if (attempt < 3) {
+                const backoff = 500 * Math.pow(2, attempt);
+                await new Promise(r => setTimeout(r, backoff));
+                return uploadChunkWithRetry(uploadId, index, total, blob, attempt + 1);
             }
-
-            const { data: { publicUrl } } = supabase.storage.from('post-images').getPublicUrl(data.path);
-            uploadedUrls.push(publicUrl);
+            throw e;
         }
-        return uploadedUrls;
+    };
+    const finishResumable = async (uploadId, filename, contentType) => {
+        const res = await fetch('/api/uploads/resumable/finish', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
+            body: JSON.stringify({ uploadId, filename, contentType, bucket: 'post-images' })
+        });
+        if (!res.ok) throw new Error('合并分片失败');
+        const j = await res.json();
+        return j.url;
     };
 
+    const uploadSingleFileResumable = async (file, fileIndex) => {
+        const uploadId = await initResumable(file.name);
+        const total = Math.ceil(file.size / CHUNK_SIZE) || 1;
+        for (let i = 0; i < total; i++) {
+            const start = i * CHUNK_SIZE;
+            const end = Math.min(start + CHUNK_SIZE, file.size);
+            const blob = file.slice(start, end);
+            await uploadChunkWithRetry(uploadId, i, total, blob);
+            setUploadProgress(prev => ({ ...prev, [fileIndex]: Math.round(((i + 1) / total) * 100) }));
+        }
+        const url = await finishResumable(uploadId, file.name, file.type);
+        return url;
+    };
+
+    const uploadImagesViaBff = async () => {
+        if (imageFiles.length === 0) return [];
+        const urls = [];
+        // 顺序上传以简化进度处理（如需并行可做有界并发）
+        for (let i = 0; i < imageFiles.length; i++) {
+            setUploadProgress(prev => ({ ...prev, [i]: 0 }));
+            const url = await uploadSingleFileResumable(imageFiles[i], i);
+            urls.push(url);
+        }
+        return urls;
+    };
 
     const handleSubmit = async () => {
         if (!user) {
@@ -127,33 +175,32 @@ const CreatePost = ({ isOpen, setIsOpen, onPostCreated, tenantId }) => {
         setIsPosting(true);
 
         try {
-            const imageUrls = imageFiles.length > 0 ? await uploadImages() : [];
+            // 1) upload images via resumable BFF
+            const imageUrls = await uploadImagesViaBff();
 
-            const params = {
-                p_user_id: user.id,
-                p_content: content.trim(),
-                p_is_ad: isAd,
-                p_image_urls: imageUrls,
-                p_tenant_id: tenantId,
-                p_use_free_post: canUseFreePost() && useFreePost
-            };
-
-            const { data, error } = await supabase.rpc('create_post_and_deduct_points', params);
-            
-            if (error) {
-                throw new Error(error.message);
+            // 2) create post via BFF
+            const res = await fetch('/api/posts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
+                body: JSON.stringify({ content: content.trim(), images: imageUrls, isAd, useFreePost }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                if (data?.error === 'insufficient-points') {
+                    toast({ variant: 'destructive', title: '积分不足', description: '积分不足，无法发布。' });
+                } else {
+                    toast({ variant: 'destructive', title: '发布失败', description: data?.error || `status ${res.status}` });
+                }
+                setIsPosting(false);
+                return;
             }
 
             toast({ title: "发布成功！", description: "您的帖子已发布。" });
-            onPostCreated(data[0]);
-            refreshProfile();
+            onPostCreated && onPostCreated(data);
+            refreshProfile && refreshProfile();
             setIsOpen(false);
         } catch (error) {
-            toast({
-                variant: "destructive",
-                title: "发布失败",
-                description: error.message || "发生未知错误，请稍后重试。"
-            });
+            toast({ variant: "destructive", title: "发布失败", description: error.message || "发生未知错误，请稍后重试。" });
         } finally {
             setIsPosting(false);
         }
@@ -163,18 +210,10 @@ const CreatePost = ({ isOpen, setIsOpen, onPostCreated, tenantId }) => {
 
     const getPostCost = useCallback(() => {
         if (canUseFreePost() && useFreePost) {
-            return {
-                amount: 0,
-                text: "使用 1 次免费额度",
-                isFree: true
-            };
+            return { amount: 0, text: "使用 1 次免费额度", isFree: true };
         }
         const amount = isAd ? costs.ad : costs.social;
-        return {
-            amount,
-            text: `消耗 ${amount} 积分`,
-            isFree: false
-        };
+        return { amount, text: `消耗 ${amount} 积分`, isFree: false };
     }, [isAd, useFreePost, profile?.free_posts_count, costs]);
 
     const finalCost = getPostCost();
@@ -211,11 +250,7 @@ const CreatePost = ({ isOpen, setIsOpen, onPostCreated, tenantId }) => {
                                             <Progress value={uploadProgress[index]} className="w-10/12 h-2" />
                                         </div>
                                     )}
-                                    {!isPosting && <Button
-                                        type="button" variant="ghost" size="icon"
-                                        className="absolute top-1 right-1 bg-black/50 text-white hover:bg-black/70 hover:text-white h-6 w-6 rounded-full"
-                                        onClick={() => removeImage(index)}
-                                    >
+                                    {!isPosting && <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 bg-black/50 text-white hover:bg-black/70 hover:text-white h-6 w-6 rounded-full" onClick={() => removeImage(index)}>
                                         <XCircle className="h-4 w-4" />
                                     </Button>}
                                 </div>
@@ -223,66 +258,30 @@ const CreatePost = ({ isOpen, setIsOpen, onPostCreated, tenantId }) => {
                         </div>
                     )}
                      <div className="flex items-center justify-between">
-                        <input
-                            type="file"
-                            ref={fileInputRef}
-                            onChange={handleFileSelect}
-                            accept="image/png, image/jpeg, image/gif"
-                            className="hidden"
-                            multiple
-                            disabled={isPosting}
-                        />
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => fileInputRef.current.click()}
-                            disabled={isPosting || imagePreviews.length >= MAX_IMAGE_COUNT}
-                        >
+                        <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/png, image/jpeg, image/gif, image/webp" className="hidden" multiple disabled={isPosting} />
+                        <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current.click()} disabled={isPosting || imagePreviews.length >= MAX_IMAGE_COUNT}>
                             <Image className="w-4 h-4 mr-2" />
                             添加图片 ({imagePreviews.length}/{MAX_IMAGE_COUNT})
                         </Button>
                         <div className="flex items-center space-x-2">
                           <Label htmlFor="is-ad-switch">{isAd ? "白菜区" : "朋友圈"}</Label>
-                          <Switch
-                            id="is-ad-switch"
-                            checked={isAd}
-                            onCheckedChange={setIsAd}
-                            disabled={isPosting}
-                          />
+                          <Switch id="is-ad-switch" checked={isAd} onCheckedChange={setIsAd} disabled={isPosting} />
                         </div>
                     </div>
                      {canUseFreePost() && (
                         <div className="flex items-center space-x-2 bg-primary/10 p-2 rounded-md">
-                            <Checkbox
-                                id="use-free-post"
-                                checked={useFreePost}
-                                onCheckedChange={setUseFreePost}
-                                disabled={isPosting}
-                            />
+                            <Checkbox id="use-free-post" checked={useFreePost} onCheckedChange={setUseFreePost} disabled={isPosting} />
                             <Label htmlFor="use-free-post" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                                 使用免费发布次数 (剩余 {profile?.free_posts_count || 0} 次)
                             </Label>
                         </div>
-                     )}
-                     <p className="text-sm text-muted-foreground text-center">
-                        本次发布: <span className="font-bold text-primary">{finalCost.text}</span>
-                    </p>
+                    )}
+                    <p className="text-sm text-muted-foreground text-center">本次发布: <span className="font-bold text-primary">{finalCost.text}</span></p>
                 </div>
                 <DialogFooter>
                     <Button variant="ghost" onClick={() => setIsOpen(false)} disabled={isPosting}>取消</Button>
                     <Button onClick={handleSubmit} disabled={isPosting || (!content.trim() && imageFiles.length === 0)} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                        {isPosting ? (
-                            <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                发布中...
-                            </>
-                        ) : (
-                            <>
-                              <Sparkles className="mr-2 h-4 w-4" />
-                              发布
-                            </>
-                        )}
+                        {isPosting ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> 发布中...</>) : (<><Sparkles className="mr-2 h-4 w-4" /> 发布</>)}
                     </Button>
                 </DialogFooter>
             </DialogContent>

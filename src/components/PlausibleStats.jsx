@@ -3,9 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users, Eye, TrendingDown, AlertCircle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/use-toast';
-import { supabase } from '@/lib/customSupabaseClient';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { fetchWithRetry } from '@/lib/api';
 
 const StatCard = ({ title, value, icon: Icon, loading }) => {
   return (
@@ -25,15 +23,12 @@ const StatCard = ({ title, value, icon: Icon, loading }) => {
   );
 };
 
-const PlausibleStats = () => {
-  const [stats, setStats] = useState({
-    visitors: 0,
-    pageviews: 0,
-    bounce_rate: 0,
-  });
+const PlausibleStats = ({ period: externalPeriod }) => {
+  const [stats, setStats] = useState({ visitors: 0, pageviews: 0, bounce_rate: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [period, setPeriod] = useState('30d');
+  const [internalPeriod, setInternalPeriod] = useState('30d');
+  const activePeriod = externalPeriod || internalPeriod;
   const { toast } = useToast();
   
   const periodOptions = {
@@ -42,62 +37,40 @@ const PlausibleStats = () => {
     '30d': '过去 30 天',
   };
 
-  const fetchStats = useCallback(async (currentPeriod) => {
+  const fetchStats = useCallback(async () => {
     setLoading(true);
     setError(null);
 
     try {
-        const { data, error: functionError } = await fetchWithRetry(() => supabase.functions.invoke('create-plausible-proxy', {
-            body: { period: currentPeriod }
-        }));
+      const res = await fetch(`/api/plausible/stats?period=${encodeURIComponent(activePeriod)}`);
+      if (!res.ok) throw new Error(`请求失败(${res.status})`);
+      const data = await res.json();
 
-        if (functionError) {
-            let errorMessage = "获取网站统计数据失败。请检查您的后台配置和网络连接。";
-            if (functionError.message.includes("Plausible API key is not configured")) {
-                errorMessage = "Plausible API 密钥未配置。请在 Supabase 后台设置 PLAUSIBLE_API_KEY。";
-            } else if (functionError.message.includes("Unauthorized")) {
-                errorMessage = "Plausible API 密钥无效或权限不足。请检查您的密钥。";
-            }
-            throw new Error(errorMessage);
-        }
-        
-        if (data && Array.isArray(data)) {
-          const aggregatedStats = data.reduce(
-            (acc, day) => {
-              acc.visitors += day.visitors;
-              acc.pageviews += day.pageviews;
+      if (Array.isArray(data)) {
+        const aggregated = data.reduce((acc, day) => {
+          acc.visitors += Number(day.visitors || 0);
+          acc.pageviews += Number(day.pageviews || 0);
+          acc.bounceWeighted += Number(day.bounce_rate || 0) * Number(day.visitors || 0);
               return acc;
-            },
-            { visitors: 0, pageviews: 0 }
-          );
+        }, { visitors: 0, pageviews: 0, bounceWeighted: 0 });
 
-          const totalVisitors = aggregatedStats.visitors;
-          const bounceRateSum = data.reduce((acc, day) => acc + (day.bounce_rate * day.visitors), 0);
-          const averageBounceRate = totalVisitors > 0 ? (bounceRateSum / totalVisitors) : 0;
-
-          setStats({
-            visitors: aggregatedStats.visitors,
-            pageviews: aggregatedStats.pageviews,
-            bounce_rate: Math.round(averageBounceRate),
-          });
+        const avgBounce = aggregated.visitors > 0 ? Math.round(aggregated.bounceWeighted / aggregated.visitors) : 0;
+        setStats({ visitors: aggregated.visitors, pageviews: aggregated.pageviews, bounce_rate: avgBounce });
         } else {
-          throw new Error("未能获取有效的统计数据。收到的数据格式不正确。");
+        throw new Error('返回数据格式不正确');
         }
-    } catch(err) {
-        setError(err.message);
-        toast({
-          variant: "destructive",
-          title: "获取统计失败",
-          description: err.message,
-        });
+    } catch (err) {
+      const msg = err.message || '网络错误';
+      setError(msg);
+      toast({ variant: 'destructive', title: '获取统计失败', description: msg });
     } finally {
         setLoading(false);
     }
-  }, [toast]);
+  }, [toast, activePeriod]);
 
   useEffect(() => {
-    fetchStats(period);
-  }, [period, fetchStats]);
+    fetchStats();
+  }, [fetchStats]);
 
   if (error) {
     return (
@@ -112,7 +85,8 @@ const PlausibleStats = () => {
     <div className="my-8">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-semibold text-gray-800">网站统计</h2>
-         <Select value={period} onValueChange={setPeriod}>
+        {!externalPeriod && (
+          <Select value={internalPeriod} onValueChange={setInternalPeriod}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="选择时间范围" />
           </SelectTrigger>
@@ -122,6 +96,7 @@ const PlausibleStats = () => {
             ))}
           </SelectContent>
         </Select>
+        )}
       </div>
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard 

@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { ArrowRightLeft, Gift, History, ShoppingCart } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import PointsMallEmbed from '@/components/PointsMallEmbed';
 
 const PointsCenter = () => {
   const { profile, refreshProfile } = useAuth();
@@ -139,7 +140,7 @@ const PointsCenter = () => {
                 <ArrowRightLeft className="mr-2 h-4 w-4" />
                 积分兑换
               </TabsTrigger>
-              <TabsTrigger value="mall" onClick={() => navigate('/points-mall')}>
+              <TabsTrigger value="mall">
                 <ShoppingCart className="mr-2 h-4 w-4" />
                 积分商城
               </TabsTrigger>
@@ -214,6 +215,19 @@ const PointsCenter = () => {
                           : '虚拟分兑入积分可以享受更优汇率。'}
                       </p>
                 </CardFooter>
+              </Card>
+            </TabsContent>
+            <TabsContent value="mall" className="mt-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center text-2xl font-bold text-gray-800">
+                    <ShoppingCart className="mr-3 text-blue-500" />
+                    积分商城
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <PointsMallEmbed />
+                </CardContent>
               </Card>
             </TabsContent>
           </Tabs>

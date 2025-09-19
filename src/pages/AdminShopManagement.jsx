@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Button } from '@/components/ui/button';
@@ -19,27 +19,34 @@ import { zhCN } from 'date-fns/locale';
 import ImageUploader from '@/components/ImageUploader';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
-const fetchProducts = async (tenantId) => {
-  const { data, error } = await supabase
-    .from('shop_products')
-    .select('*')
-    .eq('tenant_id', tenantId)
-    .order('created_at', { ascending: false });
-  if (error) throw new Error(error.message);
-  return data;
+async function bffJson(path, { token, method = 'GET', body } = {}) {
+  const res = await fetch(path, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`${method} ${path} failed: ${res.status} ${text}`);
+  }
+  return res.json();
+}
+
+const fetchProducts = async (token) => {
+  return await bffJson('/api/shop/products', { token });
 };
 
-const fetchRedemptions = async (tenantId) => {
-  const { data, error } = await supabase
-    .from('shop_redemptions')
-    .select('*, product:shop_products(name), user:profiles(username, uid)')
-    .eq('tenant_id', tenantId)
-    .order('created_at', { ascending: false });
-  if (error) throw new Error(error.message);
-  return data;
+const fetchRedemptions = async (token) => {
+  const data = await bffJson('/api/shop/redemptions?scope=all', { token });
+  // endpoint returns { data, nextPage, total } or [] depending on branch
+  if (Array.isArray(data)) return data;
+  return data?.data || [];
 };
 
-const ProductDialog = ({ isOpen, setIsOpen, product, tenantId }) => {
+const ProductDialog = ({ isOpen, setIsOpen, product, tenantId, token }) => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [formData, setFormData] = useState({});
@@ -49,7 +56,7 @@ const ProductDialog = ({ isOpen, setIsOpen, product, tenantId }) => {
   React.useEffect(() => {
     if (product) {
       setFormData(product);
-      setIsInfiniteStock(product.stock === -1);
+      setIsInfiniteStock(product.stock === -1 || product.stock === -1);
     } else {
       setFormData({
         name: '',
@@ -62,7 +69,7 @@ const ProductDialog = ({ isOpen, setIsOpen, product, tenantId }) => {
       });
       setIsInfiniteStock(true);
     }
-  }, [product, isOpen]);
+  }, [product, isOpen, tenantId]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -89,16 +96,16 @@ const ProductDialog = ({ isOpen, setIsOpen, product, tenantId }) => {
       upsertData.stock = -1;
     }
 
-    const { error } = await supabase.from('shop_products').upsert(upsertData);
-
-    if (error) {
-      toast({ variant: 'destructive', title: '保存失败', description: error.message });
-    } else {
+    try {
+      await bffJson('/api/shop/products', { token, method: 'POST', body: upsertData });
       toast({ title: '保存成功', description: `商品 "${formData.name}" 已保存。` });
-      queryClient.invalidateQueries({ queryKey: ['shop_products', tenantId] });
+      queryClient.invalidateQueries({ queryKey: ['shop_products'] });
       setIsOpen(false);
+    } catch (error) {
+      toast({ variant: 'destructive', title: '保存失败', description: error.message });
+    } finally {
+      setIsSaving(false);
     }
-    setIsSaving(false);
   };
 
   return (
@@ -160,7 +167,7 @@ const ProductDialog = ({ isOpen, setIsOpen, product, tenantId }) => {
   );
 };
 
-const RedemptionDialog = ({ isOpen, setIsOpen, redemption }) => {
+const RedemptionDialog = ({ isOpen, setIsOpen, redemption, token }) => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [status, setStatus] = useState('');
@@ -177,19 +184,16 @@ const RedemptionDialog = ({ isOpen, setIsOpen, redemption }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSaving(true);
-    const { error } = await supabase
-      .from('shop_redemptions')
-      .update({ status, notes })
-      .eq('id', redemption.id);
-
-    if (error) {
-      toast({ variant: 'destructive', title: '更新失败', description: error.message });
-    } else {
+    try {
+      await bffJson(`/api/shop/redemptions/${redemption.id}/status`, { token, method: 'POST', body: { status, notes } });
       toast({ title: '更新成功', description: '兑换记录已更新。' });
-      queryClient.invalidateQueries(['shop_redemptions', redemption.tenant_id]);
+      queryClient.invalidateQueries({ queryKey: ['shop_redemptions'] });
       setIsOpen(false);
+    } catch (error) {
+      toast({ variant: 'destructive', title: '更新失败', description: error.message });
+    } finally {
+      setIsSaving(false);
     }
-    setIsSaving(false);
   };
 
   if (!redemption) return null;
@@ -200,7 +204,7 @@ const RedemptionDialog = ({ isOpen, setIsOpen, redemption }) => {
         <DialogHeader>
           <DialogTitle>处理兑换请求</DialogTitle>
           <DialogDescription>
-            用户 {redemption.user.username} (UID: {redemption.user.uid}) 兑换了 {redemption.product.name}。
+            用户 {redemption.user?.username} (UID: {redemption.user?.uid}) 兑换了 {redemption.product?.name || redemption.product_name}。
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -230,7 +234,8 @@ const RedemptionDialog = ({ isOpen, setIsOpen, redemption }) => {
 };
 
 const AdminShopManagement = () => {
-  const { tenantId } = useAuth();
+  const { tenantId, session } = useAuth();
+  const token = session?.access_token || null;
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [isProductDialogOpen, setIsProductDialogOpen] = useState(false);
@@ -238,14 +243,29 @@ const AdminShopManagement = () => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedRedemption, setSelectedRedemption] = useState(null);
 
-  const { data: products, isLoading: isLoadingProducts } = useQuery({
-    queryKey: ['shop_products', tenantId],
-    queryFn: () => fetchProducts(tenantId),
+  const { data: products, isLoading: isLoadingProducts, error: productsError } = useQuery({
+    queryKey: ['shop_products'],
+    queryFn: () => fetchProducts(token),
+    enabled: !!token,
   });
 
-  const { data: redemptions, isLoading: isLoadingRedemptions } = useQuery({
-    queryKey: ['shop_redemptions', tenantId],
-    queryFn: () => fetchRedemptions(tenantId),
+  const { data: redemptions, isLoading: isLoadingRedemptions, error: redemptionsError } = useQuery({
+    queryKey: ['shop_redemptions'],
+    queryFn: () => fetchRedemptions(token),
+    enabled: !!token,
+  });
+
+  const deleteProductMutation = useMutation({
+    mutationFn: async (productId) => {
+      await bffJson(`/api/shop/products/${productId}`, { token, method: 'DELETE' });
+    },
+    onSuccess: () => {
+      toast({ title: '删除成功' });
+      queryClient.invalidateQueries({ queryKey: ['shop_products'] });
+    },
+    onError: (error) => {
+      toast({ variant: 'destructive', title: '删除失败', description: error.message });
+    },
   });
 
   const handleAddProduct = () => {
@@ -260,13 +280,7 @@ const AdminShopManagement = () => {
 
   const handleDeleteProduct = async (productId) => {
     if (!window.confirm('确定要删除这个商品吗？此操作不可撤销。')) return;
-    const { error } = await supabase.from('shop_products').delete().eq('id', productId);
-    if (error) {
-      toast({ variant: 'destructive', title: '删除失败', description: error.message });
-    } else {
-      toast({ title: '删除成功' });
-      queryClient.invalidateQueries({queryKey:['shop_products', tenantId]});
-    }
+    deleteProductMutation.mutate(productId);
   };
 
   const handleProcessRedemption = (redemption) => {
@@ -302,7 +316,9 @@ const AdminShopManagement = () => {
               <Button onClick={handleAddProduct}><PlusCircle className="mr-2 h-4 w-4" />添加商品</Button>
             </CardHeader>
             <CardContent>
-              {isLoadingProducts ? <Loader2 className="animate-spin" /> : (
+              {isLoadingProducts ? <Loader2 className="animate-spin" /> : productsError ? (
+                <div className="text-sm text-red-500">加载商品失败：{productsError.message}</div>
+              ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -320,13 +336,13 @@ const AdminShopManagement = () => {
                         <TableCell>{product.price}</TableCell>
                         <TableCell>{product.stock === -1 ? '无限' : product.stock}</TableCell>
                         <TableCell>
-                          <Badge variant={product.is_active ? 'default' : 'outline'}>
-                            {product.is_active ? '已上架' : '已下架'}
+                          <Badge variant={product.isActive || product.is_active ? 'default' : 'outline'}>
+                            {(product.isActive || product.is_active) ? '已上架' : '已下架'}
                           </Badge>
                         </TableCell>
                         <TableCell className="space-x-2">
                           <Button variant="outline" size="sm" onClick={() => handleEditProduct(product)}><Edit className="h-4 w-4" /></Button>
-                          <Button variant="destructive" size="sm" onClick={() => handleDeleteProduct(product.id)}><Trash2 className="h-4 w-4" /></Button>
+                          <Button variant="destructive" size="sm" onClick={() => handleDeleteProduct(product.id)} disabled={deleteProductMutation.isPending}><Trash2 className="h-4 w-4" /></Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -342,7 +358,9 @@ const AdminShopManagement = () => {
               <CardTitle>兑换记录</CardTitle>
             </CardHeader>
             <CardContent>
-              {isLoadingRedemptions ? <Loader2 className="animate-spin" /> : (
+              {isLoadingRedemptions ? <Loader2 className="animate-spin" /> : redemptionsError ? (
+                <div className="text-sm text-red-500">加载兑换记录失败：{redemptionsError.message}</div>
+              ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -357,8 +375,8 @@ const AdminShopManagement = () => {
                   <TableBody>
                     {redemptions?.map(redemption => (
                       <TableRow key={redemption.id}>
-                        <TableCell>{redemption.user.username} (UID: {redemption.user.uid})</TableCell>
-                        <TableCell>{redemption.product.name}</TableCell>
+                        <TableCell>{redemption.user?.username} (UID: {redemption.user?.uid})</TableCell>
+                        <TableCell>{redemption.product?.name || redemption.product_name}</TableCell>
                         <TableCell className="flex items-center"><Gem className="h-3 w-3 mr-1 text-primary" />{redemption.points_spent}</TableCell>
                         <TableCell>{format(new Date(redemption.created_at), 'yyyy-MM-dd HH:mm', { locale: zhCN })}</TableCell>
                         <TableCell>{getStatusBadge(redemption.status)}</TableCell>
@@ -374,8 +392,8 @@ const AdminShopManagement = () => {
           </Card>
         </TabsContent>
       </Tabs>
-      <ProductDialog isOpen={isProductDialogOpen} setIsOpen={setIsProductDialogOpen} product={selectedProduct} tenantId={tenantId} />
-      <RedemptionDialog isOpen={isRedemptionDialogOpen} setIsOpen={setIsRedemptionDialogOpen} redemption={selectedRedemption} />
+      <ProductDialog isOpen={isProductDialogOpen} setIsOpen={setIsProductDialogOpen} product={selectedProduct} tenantId={tenantId} token={token} />
+      <RedemptionDialog isOpen={isRedemptionDialogOpen} setIsOpen={setIsRedemptionDialogOpen} redemption={selectedRedemption} token={token} />
     </div>
   );
 };

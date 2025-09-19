@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { motion } from 'framer-motion';
-import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -10,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Search, Edit } from 'lucide-react';
 import EditUserDialog from '@/components/EditUserDialog';
 import { format } from 'date-fns';
+import { useAuth } from '@/contexts/SupabaseAuthContext';
 
 const UserManagement = () => {
   const [users, setUsers] = useState([]);
@@ -17,31 +17,34 @@ const UserManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingUser, setEditingUser] = useState(null);
   const { toast } = useToast();
+  const { session } = useAuth();
 
   const fetchUsers = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
-    if (error) {
-      toast({
-        variant: 'destructive',
-        title: '获取用户列表失败',
-        description: error.message,
+    try {
+      const res = await fetch('/api/admin/users?scope=global', {
+        headers: { Authorization: `Bearer ${session?.access_token || ''}` }
       });
-    } else {
-      setUsers(data);
+      if (!res.ok) throw new Error(`加载失败 (${res.status})`);
+      const data = await res.json();
+      setUsers(Array.isArray(data) ? data : []);
+    } catch (error) {
+      toast({ variant: 'destructive', title: '获取用户列表失败', description: error.message || '网络错误' });
+      setUsers([]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
     fetchUsers();
-  }, [toast]);
+  }, [session?.access_token]);
 
   const filteredUsers = useMemo(() => {
     if (!searchTerm) return users;
     return users.filter(user =>
-      user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (user.uid && user.uid.toString().includes(searchTerm))
+      String(user.username || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      String(user.uid || '').includes(searchTerm)
     );
   }, [users, searchTerm]);
 
@@ -109,13 +112,13 @@ const UserManagement = () => {
                       <TableCell className="font-mono">{user.uid}</TableCell>
                       <TableCell className="font-medium">{user.username}</TableCell>
                       <TableCell>
-                        <span className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${user.role === 'admin' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}>
+                        <span className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${user.role === 'super-admin' ? 'bg-red-100 text-red-800' : user.role === 'tenant-admin' ? 'bg-indigo-100 text-indigo-800' : 'bg-gray-100 text-gray-800'}`}>
                           {user.role}
                         </span>
                       </TableCell>
                       <TableCell className="text-right font-mono">{user.points}</TableCell>
                       <TableCell className="text-right font-mono">{user.virtual_currency}</TableCell>
-                      <TableCell>{format(new Date(user.created_at), 'yyyy-MM-dd')}</TableCell>
+                      <TableCell>{user.created_at ? format(new Date(user.created_at), 'yyyy-MM-dd') : '-'}</TableCell>
                       <TableCell className="text-right">
                         <Button variant="ghost" size="sm" onClick={() => setEditingUser(user)}>
                           <Edit className="h-4 w-4 mr-2" />
@@ -145,7 +148,7 @@ const UserManagement = () => {
                     <div className="font-mono">{user.uid}</div>
 
                     <div className="text-gray-500">角色</div>
-                    <div><span className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${user.role === 'admin' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}>{user.role}</span></div>
+                    <div><span className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${user.role === 'super-admin' ? 'bg-red-100 text-red-800' : user.role === 'tenant-admin' ? 'bg-indigo-100 text-indigo-800' : 'bg-gray-100 text-gray-800'}`}>{user.role}</span></div>
                     
                     <div className="text-gray-500">积分</div>
                     <div className="font-mono">{user.points}</div>
@@ -154,7 +157,7 @@ const UserManagement = () => {
                     <div className="font-mono">{user.virtual_currency}</div>
                     
                     <div className="text-gray-500">加入时间</div>
-                    <div>{format(new Date(user.created_at), 'yyyy-MM-dd')}</div>
+                    <div>{user.created_at ? format(new Date(user.created_at), 'yyyy-MM-dd') : '-'}</div>
                   </CardContent>
                 </Card>
               ))}

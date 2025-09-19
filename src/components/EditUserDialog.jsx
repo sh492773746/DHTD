@@ -6,18 +6,19 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Plus, Minus } from 'lucide-react';
+import { useAuth } from '@/contexts/SupabaseAuthContext';
 
 const EditUserDialog = ({ user, isOpen, onClose, onSave }) => {
   const [formData, setFormData] = useState({});
   const [initialData, setInitialData] = useState({});
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const { session } = useAuth();
 
   useEffect(() => {
     if (user) {
       const userData = {
         username: user.username || '',
-        role: user.role || 'user',
         points: user.points || 0,
         virtual_currency: user.virtual_currency || 0,
         free_posts_count: user.free_posts_count || 0,
@@ -34,9 +35,9 @@ const EditUserDialog = ({ user, isOpen, onClose, onSave }) => {
 
   const handleChange = (e) => {
     const { id, value } = e.target;
-    const numericFields = ['points', 'virtual_currency', 'free_posts_count', 'uid'];
-    const numericValue = numericFields.includes(id) 
-      ? value === '' ? '' : parseInt(value.replace(/[^0-9]/g, ''), 10)
+    const numericFields = ['points', 'virtual_currency', 'free_posts_count'];
+    const numericValue = numericFields.includes(id)
+      ? value === '' ? '' : parseInt(String(value).replace(/[^0-9]/g, ''), 10)
       : value;
     setFormData(prev => ({ ...prev, [id]: numericValue }));
   };
@@ -48,19 +49,26 @@ const EditUserDialog = ({ user, isOpen, onClose, onSave }) => {
     }));
   };
 
-  const handleSelectChange = (value) => {
-    setFormData(prev => ({ ...prev, role: value }));
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!user?.id) return;
     setLoading(true);
-    toast({
-        variant: 'destructive',
-        title: '功能已禁用',
-        description: '请先集成数据库以启用此功能。',
-    });
-    setLoading(false);
+    try {
+      const res = await fetch(`/api/admin/users/${encodeURIComponent(user.id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
+        body: JSON.stringify({ ...formData, tenant_id: user?.tenant_id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.error) throw new Error(data?.error || `保存失败(${res.status})`);
+      toast({ title: '保存成功', description: '用户资料已更新。' });
+      onSave && onSave(data);
+      onClose && onClose();
+    } catch (err) {
+      toast({ variant: 'destructive', title: '保存失败', description: err.message || '网络错误' });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -79,18 +87,6 @@ const EditUserDialog = ({ user, isOpen, onClose, onSave }) => {
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="username" className="text-right">用户名</Label>
               <Input id="username" value={formData.username || ''} onChange={handleChange} className="col-span-3" />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="role" className="text-right">角色</Label>
-              <Select value={formData.role} onValueChange={handleSelectChange}>
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="选择角色" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="user">user</SelectItem>
-                  <SelectItem value="admin">admin</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="points" className="text-right">积分</Label>

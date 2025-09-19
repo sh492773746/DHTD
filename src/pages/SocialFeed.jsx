@@ -43,27 +43,34 @@ const NotLoggedInPrompt = () => {
 
 
 const SocialFeed = () => {
-    const { siteSettings, isInitialized, user } = useAuth();
+    const { siteSettings, isInitialized, user, session } = useAuth();
     const { isLoading: isTenantLoading } = useTenant();
     const [activeTab, setActiveTab] = useState('social');
     const { ref, inView } = useInView({ threshold: 0.5 });
     
-    // 修正：与后台 pageContentConfig 一致，使用 'social' 页面
     const { data: pinnedAds, isLoading: isPinnedAdsLoading } = usePageContent('social', 'pinned_ads');
     
     const fetchPosts = async ({ pageParam = 0 }) => {
         const sharedMode = String(siteSettings?.social_forum_mode || '').toLowerCase() === 'shared';
-        const url = sharedMode
+        const base = sharedMode
           ? `/api/shared/posts?page=${pageParam}&size=${POSTS_PER_PAGE}`
           : `/api/posts?tab=${activeTab}&page=${pageParam}&size=${POSTS_PER_PAGE}`;
-        const token = localStorage.getItem('sb-access-token');
+        // for independent mode, allow reading global main-site posts when on sub-sites
+        const url = sharedMode ? base : `${base}&source=tenant`;
+        const token = session?.access_token || null;
         const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
         const res = await fetch(url, { headers });
         if (!res.ok) throw new Error('Failed to load posts');
         const rows = await res.json();
+        const normalized = (rows || []).map(r => {
+          let image_urls = [];
+          if (Array.isArray(r.images)) image_urls = r.images;
+          else if (typeof r.images === 'string') { try { image_urls = JSON.parse(r.images || '[]'); } catch { image_urls = []; } }
+          return { ...r, image_urls };
+        });
         return {
-            data: rows || [],
-            nextPage: (rows || []).length === POSTS_PER_PAGE ? pageParam + 1 : undefined,
+            data: normalized,
+            nextPage: normalized.length === POSTS_PER_PAGE ? pageParam + 1 : undefined,
         };
     };
     

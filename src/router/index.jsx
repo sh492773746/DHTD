@@ -1,5 +1,5 @@
 import React from 'react';
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter, Navigate } from 'react-router-dom';
 import Root from '@/Root';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import AdminRoute from '@/components/AdminRoute';
@@ -20,7 +20,7 @@ import PointsHistory from '@/pages/PointsHistory';
 import Notifications from '@/pages/Notifications';
 import Dashboard from '@/pages/Dashboard';
 import GameCenter from '@/pages/GameCenter';
-import PointsMall from '@/pages/PointsMall';
+// import PointsMall from '@/pages/PointsMall';
 
 // Auth Pages
 import AuthPage from '@/pages/AuthPage';
@@ -37,8 +37,8 @@ import PageContentManager from '@/pages/PageContentManager';
 import AdminNotifications from '@/pages/AdminNotifications';
 import InvitationAnalytics from '@/pages/InvitationAnalytics';
 import AdminSaasManagement from '@/pages/AdminSaasManagement';
-import AdminSettings from '@/pages/AdminSettings';
 import AdminShopManagement from '@/pages/AdminShopManagement';
+import AdminDatabases from '@/pages/AdminDatabases';
 
 // Tenant Admin Pages
 import TenantDashboard from '@/pages/TenantDashboard';
@@ -110,10 +110,8 @@ const routerConfig = [
             path: 'points-center',
             element: <ProtectedRoute><PointsCenter /></ProtectedRoute>,
           },
-          {
-            path: 'points-mall',
-            element: <ProtectedRoute><PointsMall /></ProtectedRoute>,
-          },
+          // Legacy redirect for removed route
+          { path: 'points-mall', element: <Navigate to="/points-center" replace /> },
           {
             path: 'points-history',
             element: <ProtectedRoute><PointsHistory /></ProtectedRoute>,
@@ -138,7 +136,8 @@ const routerConfig = [
             { path: 'notifications', element: <AdminNotifications /> },
             { path: 'invitations', element: <InvitationAnalytics /> },
             { path: 'saas', element: <AdminSaasManagement /> },
-            { path: 'settings', element: <AdminSettings /> },
+            { path: 'settings', element: <Navigate to="/admin/site-settings" replace /> },
+            { path: 'databases', element: <AdminDatabases /> },
             { path: 'shop', element: <AdminShopManagement /> },
         ]
       },
