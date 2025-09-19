@@ -1212,12 +1212,15 @@ app.get('/api/notifications/unread', async (c) => {
     const db = await getTursoClientForTenant(0);
     const userId = c.get('userId');
     if (!userId) return c.json({ items: [], count: 0 });
+    const page = Number(c.req.query('page') || 0);
+    const size = Math.min(Number(c.req.query('size') || 20), 100);
     const items = await db
       .select()
       .from(notificationsTable)
       .where(and(eq(notificationsTable.userId, userId), eq(notificationsTable.isRead, 0)))
       .orderBy(desc(notificationsTable.createdAt))
-      .limit(5);
+      .limit(size)
+      .offset(page * size);
     const mapped = (items || []).map(r => {
       let parsed;
       try { parsed = typeof r.content === 'string' ? JSON.parse(r.content) : (r.content || {}); } catch { parsed = { message: String(r.content || '') }; }
@@ -1234,7 +1237,8 @@ app.get('/api/notifications/unread', async (c) => {
       };
     });
     const count = mapped.length || 0;
-    return c.json({ items: mapped, count });
+    const nextPage = count < size ? undefined : page + 1;
+    return c.json({ items: mapped, count, nextPage });
   } catch (e) {
     console.error('GET /api/notifications/unread error', e);
     return c.json({ items: [], count: 0 });
