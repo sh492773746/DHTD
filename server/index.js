@@ -1193,6 +1193,205 @@ app.get('/api/plausible/stats', async (c) => {
   }
 });
 
+// New: Umami stats proxy
+app.get('/api/umami/stats', async (c) => {
+  __setCache(c, 60);
+  try {
+    const period = String(c.req.query('period') || '30d');
+    const days = period === 'today' ? 1 : (period === '3d' ? 3 : (period === '7d' ? 7 : 30));
+
+    const now = new Date();
+    const endAt = now.getTime();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startAt = startOfToday - (days - 1) * 24 * 3600 * 1000;
+
+    const rawBase = process.env.UMAMI_BASE_URL || process.env.UMAMI_API_BASE || 'https://us.umami.is/api';
+    const websiteId = process.env.UMAMI_WEBSITE_ID || process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID;
+    const apiKey = process.env.UMAMI_API_KEY || process.env.NEXT_PUBLIC_UMAMI_API_KEY;
+
+    if (!websiteId || !apiKey) {
+      return c.json({ error: 'Umami API not configured' }, 500);
+    }
+
+    function normalizeBase(base) {
+      let b = String(base || '').trim();
+      if (!b) return 'https://us.umami.is/api';
+      if (!/^https?:\/\//i.test(b)) b = `https://${b}`;
+      // If user passed something like us.umami.is/websites/<id>, strip trailing path and ensure /api
+      try {
+        const u = new URL(b);
+        const path = u.pathname || '';
+        if (path.includes('/websites/')) {
+          u.pathname = '/';
+        }
+        let out = u.toString().replace(/\/?$/, '');
+        if (!/\/api(\/.+)?$/i.test(out)) out = `${out}/api`;
+        return out.replace(/\/$/, '');
+      } catch {
+        // Fallback
+        if (!/\/api(\/.+)?$/i.test(b)) b = `${b.replace(/\/$/, '')}/api`;
+        return b.replace(/\/$/, '');
+      }
+    }
+
+    const apiBase = normalizeBase(rawBase);
+    const headers = { 'Accept': 'application/json', 'Authorization': `Bearer ${apiKey}` };
+
+    const pageviewsUrl = `${apiBase}/websites/${encodeURIComponent(websiteId)}/pageviews?startAt=${startAt}&endAt=${endAt}&unit=day`;
+    const statsUrl = `${apiBase}/websites/${encodeURIComponent(websiteId)}/stats?startAt=${startAt}&endAt=${endAt}`;
+
+    const [pvRes, statsRes] = await Promise.all([
+      fetch(pageviewsUrl, { headers }),
+      fetch(statsUrl, { headers }),
+    ]);
+
+    if (!pvRes.ok) throw new Error(`Umami pageviews error ${pvRes.status}`);
+    if (!statsRes.ok) throw new Error(`Umami stats error ${statsRes.status}`);
+
+    const pvJson = await pvRes.json();
+    const statsJson = await statsRes.json();
+
+    const pageviewsSeries = Array.isArray(pvJson?.pageviews) ? pvJson.pageviews : [];
+    // Umami returns sessions timeseries for visits/unique visitors
+    const sessionsSeries = Array.isArray(pvJson?.sessions) ? pvJson.sessions : (Array.isArray(pvJson?.visitors) ? pvJson.visitors : []);
+
+    const dayMs = 24 * 3600 * 1000;
+    const daysList = [];
+    for (let i = 0; i < days; i++) {
+      const d = new Date(startAt + i * dayMs).toISOString().slice(0, 10);
+      daysList.push(d);
+    }
+
+    const toDate = (t) => new Date(Number(t)).toISOString().slice(0, 10);
+
+    const pvMap = Object.create(null);
+    for (const p of pageviewsSeries) {
+      const d = toDate(p.t ?? p.time ?? 0);
+      pvMap[d] = Number(p.y || p.value || 0);
+    }
+    const svMap = Object.create(null);
+    for (const s of sessionsSeries) {
+      const d = toDate(s.t ?? s.time ?? 0);
+      svMap[d] = Number(s.y || s.value || 0);
+    }
+
+    const totalSessions = Number(statsJson?.sessions ?? statsJson?.visits ?? statsJson?.visitors ?? 0);
+    const bounces = Number(statsJson?.bounces ?? 0);
+    const bounceRate = totalSessions > 0 ? Math.round((bounces / totalSessions) * 100) : 0;
+
+    const result = daysList.map((d) => ({
+      date: d,
+      visitors: Number(svMap[d] || 0),
+      pageviews: Number(pvMap[d] || 0),
+      // Umami API doesn't expose daily bounce rate; use period-average for each day so weighted avg works
+      bounce_rate: bounceRate,
+    }));
+
+    return c.json(result);
+  } catch (e) {
+    console.error('GET /api/umami/stats error', e);
+    return c.json([]);
+  }
+});
+
+// New: Umami overview (summary + daily series)
+app.get('/api/umami/overview', async (c) => {
+  __setCache(c, 60);
+  try {
+    const period = String(c.req.query('period') || '30d');
+    const days = period === 'today' ? 1 : (period === '3d' ? 3 : (period === '7d' ? 7 : 30));
+
+    const now = new Date();
+    const endAt = now.getTime();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startAt = startOfToday - (days - 1) * 24 * 3600 * 1000;
+
+    const rawBase = process.env.UMAMI_BASE_URL || process.env.UMAMI_API_BASE || 'https://us.umami.is/api';
+    const websiteId = process.env.UMAMI_WEBSITE_ID || process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID;
+    const apiKey = process.env.UMAMI_API_KEY || process.env.NEXT_PUBLIC_UMAMI_API_KEY;
+    if (!websiteId || !apiKey) return c.json({ error: 'Umami API not configured' }, 500);
+
+    function normalizeBase(base) {
+      let b = String(base || '').trim();
+      if (!b) return 'https://us.umami.is/api';
+      if (!/^https?:\/\//i.test(b)) b = `https://${b}`;
+      try {
+        const u = new URL(b);
+        if ((u.pathname || '').includes('/websites/')) u.pathname = '/';
+        let out = u.toString().replace(/\/?$/, '');
+        if (!/\/api(\/.+)?$/i.test(out)) out = `${out}/api`;
+        return out.replace(/\/$/, '');
+      } catch {
+        if (!/\/api(\/.+)?$/i.test(b)) b = `${b.replace(/\/$/, '')}/api`;
+        return b.replace(/\/$/, '');
+      }
+    }
+    const apiBase = normalizeBase(rawBase);
+    const headers = { 'Accept': 'application/json', 'Authorization': `Bearer ${apiKey}` };
+
+    const pageviewsUrl = `${apiBase}/websites/${encodeURIComponent(websiteId)}/pageviews?startAt=${startAt}&endAt=${endAt}&unit=day`;
+    const statsUrl = `${apiBase}/websites/${encodeURIComponent(websiteId)}/stats?startAt=${startAt}&endAt=${endAt}`;
+
+    const [pvRes, statsRes] = await Promise.all([
+      fetch(pageviewsUrl, { headers }),
+      fetch(statsUrl, { headers }),
+    ]);
+    if (!pvRes.ok) throw new Error(`Umami pageviews error ${pvRes.status}`);
+    if (!statsRes.ok) throw new Error(`Umami stats error ${statsRes.status}`);
+
+    const pvJson = await pvRes.json();
+    const statsJson = await statsRes.json();
+
+    const pageviewsSeries = Array.isArray(pvJson?.pageviews) ? pvJson.pageviews : [];
+    const sessionsSeries = Array.isArray(pvJson?.sessions) ? pvJson.sessions : (Array.isArray(pvJson?.visitors) ? pvJson.visitors : []);
+
+    const toDate = (t) => new Date(Number(t)).toISOString().slice(0, 10);
+
+    const pvMap = Object.create(null);
+    for (const p of pageviewsSeries) {
+      const d = toDate(p.t ?? p.time ?? 0);
+      pvMap[d] = Number(p.y || p.value || 0);
+    }
+    const svMap = Object.create(null);
+    for (const s of sessionsSeries) {
+      const d = toDate(s.t ?? s.time ?? 0);
+      svMap[d] = Number(s.y || s.value || 0);
+    }
+
+    const dayMs = 24 * 3600 * 1000;
+    const series = [];
+    for (let t = startAt; t <= endAt; t += dayMs) {
+      const d = new Date(t).toISOString().slice(0, 10);
+      series.push({ date: d, visitors: Number(svMap[d] || 0), pageviews: Number(pvMap[d] || 0) });
+    }
+
+    const totalPageviews = Number(statsJson?.pageviews ?? statsJson?.views ?? 0);
+    const totalSessions = Number(statsJson?.sessions ?? statsJson?.visits ?? 0);
+    const totalVisitors = Number(statsJson?.visitors ?? 0);
+    const bounces = Number(statsJson?.bounces ?? 0);
+    const totalTime = Number(statsJson?.totaltime ?? statsJson?.totalTime ?? statsJson?.time ?? 0);
+
+    const bounceRate = totalSessions > 0 ? Math.round((bounces / totalSessions) * 100) : 0;
+    const avgSessionDurationSec = totalSessions > 0 ? Math.round(totalTime / totalSessions) : 0;
+    const pagesPerSession = totalSessions > 0 ? Number((totalPageviews / totalSessions).toFixed(2)) : 0;
+
+    const summary = {
+      visitors: totalVisitors,
+      pageviews: totalPageviews,
+      sessions: totalSessions,
+      bounces,
+      bounce_rate: bounceRate,
+      avg_session_duration_s: avgSessionDurationSec,
+      pages_per_session: pagesPerSession,
+    };
+
+    return c.json({ summary, series });
+  } catch (e) {
+    console.error('GET /api/umami/overview error', e);
+    return c.json({ summary: null, series: [] });
+  }
+});
+
 app.get('/api/admin/users', async (c) => {
   try {
     const userId = c.get('userId'); if (!userId) return c.json([], 401);

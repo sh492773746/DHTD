@@ -12,7 +12,7 @@ import { zhCN } from 'date-fns/locale';
 import { useQuery } from '@tanstack/react-query';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from '@/components/ui/skeleton';
-import PlausibleStats from '@/components/PlausibleStats';
+import UmamiOverviewCard from '@/components/PlausibleStats';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, LineController, Title, Tooltip, Legend);
 
@@ -143,7 +143,7 @@ const AdminDashboard = () => {
           <StatCard title="总发帖数" value={isLoading ? '...' : data?.totalPosts?.toLocaleString() || '0'} icon={FileText} loading={isLoading} />
         </div>
 
-        <PlausibleStats period={period} />
+        <UmamiOverviewCard period={period} />
 
         <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-7">
           <Card className="lg:col-span-4">
