@@ -20,11 +20,28 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import dns from 'node:dns/promises';
 import net from 'node:net';
+import sharp from 'sharp';
 
 const app = new Hono();
 
 // Secure headers
 app.use('*', secureHeaders());
+// Additional CSP & Referrer Policy
+app.use('*', async (c, next) => {
+  const umami = 'https://cloud.umami.is';
+  const self = "'self'";
+  c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+  c.header('X-Content-Type-Options', 'nosniff');
+  c.header('Content-Security-Policy', [
+    `default-src ${self}`,
+    `script-src ${self} ${umami}`,
+    `img-src ${self} data: https:`,
+    `style-src ${self} 'unsafe-inline'`,
+    `connect-src ${self} https:`,
+    `frame-ancestors 'none'`,
+  ].join('; '));
+  await next();
+});
 
 // Compression
 app.use('*', compress());
@@ -378,9 +395,12 @@ app.post('/api/uploads/post-images', async (c) => {
     for (const file of files) {
       const safeName = (file.name || 'image').replace(/[^a-zA-Z0-9._-]/g, '_');
       const objectPath = `${userId}/${Date.now()}_${safeName}`;
+      const buf = Buffer.from(await file.arrayBuffer());
+      let outBuf = buf;
+      try { outBuf = await sharp(buf).rotate().jpeg({ quality: 90 }).toBuffer(); } catch {}
       const { error: upErr } = await supa.storage
         .from(bucket)
-        .upload(objectPath, file, { contentType: file.type || 'application/octet-stream', cacheControl: '3600', upsert: false });
+        .upload(objectPath, outBuf, { contentType: file.type || 'image/jpeg', cacheControl: '3600', upsert: false });
       if (upErr) {
         if (String(upErr.message || '').includes('exists')) {
           const { data: { publicUrl } } = supa.storage.from(bucket).getPublicUrl(objectPath);
@@ -419,9 +439,12 @@ app.post('/api/uploads/avatar', async (c) => {
     await ensureBucketPublic(supa, bucket);
     const safeName = (file.name || 'avatar').replace(/[^a-zA-Z0-9._-]/g, '_');
     const objectPath = `${userId}/${Date.now()}_${safeName}`;
+    const buf = Buffer.from(await file.arrayBuffer());
+    let outBuf = buf;
+    try { outBuf = await sharp(buf).rotate().jpeg({ quality: 90 }).toBuffer(); } catch {}
     const { error: upErr } = await supa.storage
       .from(bucket)
-      .upload(objectPath, file, { contentType: file.type || 'application/octet-stream', cacheControl: '3600', upsert: true });
+      .upload(objectPath, outBuf, { contentType: file.type || 'image/jpeg', cacheControl: '3600', upsert: true });
     if (upErr) throw upErr;
     const { data: { publicUrl } } = supa.storage.from(bucket).getPublicUrl(objectPath);
     return c.json({ url: publicUrl });
