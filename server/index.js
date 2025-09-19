@@ -1340,6 +1340,14 @@ app.get('/api/umami/overview', async (c) => {
   __setCache(c, 60);
   try {
     const period = String(c.req.query('period') || '30d');
+
+    // ETag support
+    const key = `umami:${period}`;
+    // Build a weak etag using period only (data changes per minute, cache is short)
+    const etag = crypto.createHash('sha1').update(key).digest('hex');
+    const inm = c.req.header('if-none-match');
+    if (inm && inm === etag) return c.body(null, 304);
+    c.header('ETag', etag);
     const days = period === 'today' ? 1 : (period === '3d' ? 3 : (period === '7d' ? 7 : 30));
 
     const now = new Date();
@@ -3330,9 +3338,12 @@ app.delete('/api/shop/products/:id', async (c) => {
 app.post('/api/shop/redeem', async (c) => {
   try {
     const userId = c.get('userId'); if (!userId) return c.json({ error: 'unauthorized' }, 401);
-    const body = await c.req.json();
-    const productId = Number(body?.productId);
-    const source = String(body?.source || 'tenant');
+      const body = await c.req.json().catch(() => ({}));
+  const productId = Number.parseInt(String(body?.productId || body?.product_id || ''), 10);
+  const qty = Number.parseInt(String(body?.quantity ?? 1), 10);
+  if (!Number.isFinite(productId) || productId <= 0) return c.json({ error: 'invalid-product' }, 400);
+  if (!Number.isFinite(qty) || qty <= 0 || qty > 100) return c.json({ error: 'invalid-quantity' }, 400);
+  const source = String(body?.source || 'tenant');
     const defaultDb = await getTursoClientForTenant(0);
     const host = c.get('host').split(':')[0];
     const tenantId = await resolveTenantId(defaultDb, host);
