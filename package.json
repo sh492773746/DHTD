@@ -48,7 +48,6 @@
     "hono": "^4.9.8",
     "jose": "^6.1.0",
     "lucide-react": "0.292.0",
-    "plausible-tracker": "^0.3.8",
     "react": "18.3.1",
     "react-chartjs-2": "^5.2.0",
     "react-day-picker": "^8.10.1",
