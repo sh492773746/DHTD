@@ -139,6 +139,27 @@ app.use(['/api/umami', '/api/notifications', '/api/admin/users'], async (c, next
   await next();
 });
 
+// fetch with timeout & retry for external calls
+async function fetchWithTimeout(url, opts = {}) {
+  const timeoutMs = Number(process.env.FETCH_TIMEOUT_MS || 5000);
+  const retries = Number(process.env.FETCH_RETRIES || 1);
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { ...opts, signal: controller.signal });
+      clearTimeout(t);
+      return res;
+    } catch (e) {
+      clearTimeout(t);
+      lastErr = e;
+      if (attempt === retries) throw e;
+    }
+  }
+  throw lastErr;
+}
+
 async function getBranchUrlForTenant(tenantId) {
   if (!tenantId) return null;
   try {
@@ -157,21 +178,33 @@ async function getBranchUrlForTenant(tenantId) {
   return null;
 }
 
+const __drizzleCache = new Map(); // cache drizzle instances by key
+
 async function getTursoClientForTenant(tenantId) {
   const branchUrl = await getBranchUrlForTenant(tenantId);
   const url = branchUrl || process.env.TURSO_DATABASE_URL || process.env.TURSO_PRIMARY_URL;
   const authToken = process.env.TURSO_AUTH_TOKEN;
   if (!url || !authToken) throw new Error('Turso server env not set');
+  const key = `tenant:${tenantId}|${url}`;
+  const cached = __drizzleCache.get(key);
+  if (cached) return cached;
   const client = createClient({ url, authToken });
-  return drizzle(client);
+  const db = drizzle(client);
+  __drizzleCache.set(key, db);
+  return db;
 }
 
 function getGlobalDb() {
   const url = process.env.TURSO_PRIMARY_URL || process.env.TURSO_DATABASE_URL;
   const authToken = process.env.TURSO_AUTH_TOKEN;
   if (!url || !authToken) throw new Error('Turso server env not set');
+  const key = `global|${url}`;
+  const cached = __drizzleCache.get(key);
+  if (cached) return cached;
   const client = createClient({ url, authToken });
-  return drizzle(client);
+  const db = drizzle(client);
+  __drizzleCache.set(key, db);
+  return db;
 }
 
 // Raw libSQL helpers
@@ -1282,8 +1315,8 @@ app.get('/api/umami/stats', async (c) => {
     const statsUrl = `${apiBase}/websites/${encodeURIComponent(websiteId)}/stats?startAt=${startAt}&endAt=${endAt}`;
 
     const [pvRes, statsRes] = await Promise.all([
-      fetch(pageviewsUrl, { headers }),
-      fetch(statsUrl, { headers }),
+      fetchWithTimeout(pageviewsUrl, { headers }),
+      fetchWithTimeout(statsUrl, { headers }),
     ]);
 
     if (!pvRes.ok) throw new Error(`Umami pageviews error ${pvRes.status}`);
@@ -1382,8 +1415,8 @@ app.get('/api/umami/overview', async (c) => {
     const statsUrl = `${apiBase}/websites/${encodeURIComponent(websiteId)}/stats?startAt=${startAt}&endAt=${endAt}`;
 
     const [pvRes, statsRes] = await Promise.all([
-      fetch(pageviewsUrl, { headers }),
-      fetch(statsUrl, { headers }),
+      fetchWithTimeout(pageviewsUrl, { headers }),
+      fetchWithTimeout(statsUrl, { headers }),
     ]);
     if (!pvRes.ok) throw new Error(`Umami pageviews error ${pvRes.status}`);
     if (!statsRes.ok) throw new Error(`Umami stats error ${statsRes.status}`);
@@ -4790,7 +4823,7 @@ app.post('/api/admin/tenants/:id/domain/bind', async (c) => {
     if (!token || !projectId) return c.json({ ok: false, error: 'vercel-env-missing' }, 500);
     const url = new URL(`https://api.vercel.com/v10/projects/${projectId}/domains`);
     if (teamId) url.searchParams.set('teamId', teamId);
-    const resp = await fetch(url, {
+    const resp = await fetchWithTimeout(url, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: domain })
@@ -4822,7 +4855,7 @@ app.post('/api/admin/tenants/:id/domain/verify', async (c) => {
     if (!token || !projectId) return c.json({ ok: false, error: 'vercel-env-missing' }, 500);
     const url = new URL(`https://api.vercel.com/v10/projects/${projectId}/domains/${encodeURIComponent(domain)}/verify`);
     if (teamId) url.searchParams.set('teamId', teamId);
-    const resp = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+    const resp = await fetchWithTimeout(url, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
     const data = await resp.json().catch(() => ({}));
     return c.json({ ok: resp.ok, status: resp.status, data });
   } catch (e) {
