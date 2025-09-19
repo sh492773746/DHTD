@@ -1,7 +1,5 @@
 {
-  "routes": [
-    { "src": "^/api/(.*)$", "dest": "/api/index", "headers": { "x-original-path": "/api/$1" } },
-    { "src": "^/(.*\\.(?:js|css|png|jpg|jpeg|gif|svg|webp|ico|json|txt|map))$", "dest": "/$1" },
-    { "src": "^(?!/api/).*$", "dest": "/index.html" }
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://dhtd.onrender.com/:path*" }
   ]
 } 
