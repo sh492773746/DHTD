@@ -4482,3 +4482,106 @@ app.get('/api/shared/posts/:id', async (c) => {
     return c.json({ error: 'failed' }, 500);
   }
 });
+
+app.get('/api/tenants/current', async (c) => {
+  try {
+    const defaultDb = await getTursoClientForTenant(0);
+    const fwd = c.req.header('x-forwarded-host');
+    const host = (fwd || c.get('host') || '').split(':')[0];
+    const tenantId = await resolveTenantId(defaultDb, host);
+    const gdb = getGlobalDb(); await ensureTenantRequestsSchemaRaw(getGlobalClient());
+    const rows = await gdb.select().from(tenantRequestsTable).where(eq(tenantRequestsTable.id, tenantId)).limit(1);
+    const r = rows?.[0] || null;
+    return c.json({
+      tenantId,
+      customDomain: r ? (r.desiredDomain || r.desired_domain || null) : null,
+      vercelDomain: r ? (r.vercelAssignedDomain || r.vercel_assigned_domain || null) : null,
+      status: r ? (r.status || 'pending') : 'unknown',
+      host,
+    });
+  } catch (e) {
+    return c.json({ tenantId: 0, customDomain: null, vercelDomain: null });
+  }
+});
+
+app.post('/api/admin/tenants/:id/domain/bind', async (c) => {
+  try {
+    const auth = requireAdmin(c);
+    if (!auth.ok) return c.json({ ok: false, error: auth.reason }, 401);
+    const id = Number(c.req.param('id')); if (!id) return c.json({ ok: false, error: 'invalid' }, 400);
+    const body = await c.req.json();
+    const domain = String(body?.domain || '').trim();
+    if (!domain) return c.json({ ok: false, error: 'invalid-domain' }, 400);
+    const token = process.env.VERCEL_TOKEN;
+    const projectId = process.env.VERCEL_PROJECT_ID;
+    const teamId = process.env.VERCEL_TEAM_ID;
+    if (!token || !projectId) return c.json({ ok: false, error: 'vercel-env-missing' }, 500);
+    const url = new URL(`https://api.vercel.com/v10/projects/${projectId}/domains`);
+    if (teamId) url.searchParams.set('teamId', teamId);
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: domain })
+    });
+    const data = await resp.json().catch(() => ({}));
+    // save to DB
+    try {
+      const gdb = getGlobalDb(); await ensureTenantRequestsSchemaRaw(getGlobalClient());
+      await gdb.update(tenantRequestsTable).set({ desiredDomain: domain }).where(eq(tenantRequestsTable.id, id));
+    } catch {}
+    return c.json({ ok: resp.ok, status: resp.status, data });
+  } catch (e) {
+    return c.json({ ok: false, error: e?.message || 'failed' }, 500);
+  }
+});
+
+app.post('/api/admin/tenants/:id/domain/verify', async (c) => {
+  try {
+    const auth = requireAdmin(c);
+    if (!auth.ok) return c.json({ ok: false, error: auth.reason }, 401);
+    const id = Number(c.req.param('id')); if (!id) return c.json({ ok: false, error: 'invalid' }, 400);
+    const gdb = getGlobalDb(); await ensureTenantRequestsSchemaRaw(getGlobalClient());
+    const row = (await gdb.select().from(tenantRequestsTable).where(eq(tenantRequestsTable.id, id)).limit(1))?.[0];
+    const domain = row?.desiredDomain || row?.desired_domain || null;
+    if (!domain) return c.json({ ok: false, error: 'no-domain' }, 400);
+    const token = process.env.VERCEL_TOKEN;
+    const projectId = process.env.VERCEL_PROJECT_ID;
+    const teamId = process.env.VERCEL_TEAM_ID;
+    if (!token || !projectId) return c.json({ ok: false, error: 'vercel-env-missing' }, 500);
+    const url = new URL(`https://api.vercel.com/v10/projects/${projectId}/domains/${encodeURIComponent(domain)}/verify`);
+    if (teamId) url.searchParams.set('teamId', teamId);
+    const resp = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+    const data = await resp.json().catch(() => ({}));
+    return c.json({ ok: resp.ok, status: resp.status, data });
+  } catch (e) {
+    return c.json({ ok: false, error: e?.message || 'failed' }, 500);
+  }
+});
+
+app.get('/api/admin/tenants/:id/connectivity', async (c) => {
+  try {
+    const auth = requireAdmin(c);
+    if (!auth.ok) return c.json({ ok: false, error: auth.reason }, 401);
+    const id = Number(c.req.param('id')); if (!id) return c.json({ ok: false, error: 'invalid' }, 400);
+    const gdb = getGlobalDb(); await ensureTenantRequestsSchemaRaw(getGlobalClient());
+    const row = (await gdb.select().from(tenantRequestsTable).where(eq(tenantRequestsTable.id, id)).limit(1))?.[0] || null;
+    const customDomain = row ? (row.desiredDomain || row.desired_domain || null) : null;
+    const vercelDomain = row ? (row.vercelAssignedDomain || row.vercel_assigned_domain || null) : null;
+    async function probe(url) {
+      if (!url) return { url: null, ok: false, status: 0 };
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), 5000);
+      try {
+        const resp = await fetch(`https://${url}/api/health`, { signal: controller.signal });
+        clearTimeout(t);
+        return { url, ok: resp.ok, status: resp.status };
+      } catch (e) {
+        return { url, ok: false, status: 0, error: String(e?.message || e) };
+      }
+    }
+    const [p1, p2] = await Promise.all([probe(customDomain), probe(vercelDomain)]);
+    return c.json({ ok: true, custom: p1, vercel: p2 });
+  } catch (e) {
+    return c.json({ ok: false, error: e?.message || 'failed' }, 500);
+  }
+});

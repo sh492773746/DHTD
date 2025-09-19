@@ -21,7 +21,7 @@ import {
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 
-const RequestTable = ({ requests, isSubmitting, onApprove, onReject, onDelete, onPreview }) => {
+const RequestTable = ({ requests, isSubmitting, onApprove, onReject, onDelete, onPreview, onBindDomain, onVerifyDomain, onCheckConnectivity }) => {
   const navigate = useNavigate();
 
   const handleManageContent = (tenantId) => {
@@ -111,6 +111,24 @@ const RequestTable = ({ requests, isSubmitting, onApprove, onReject, onDelete, o
                           <Edit className="mr-2 h-4 w-4" />
                           管理内容
                         </DropdownMenuItem>
+                        {onBindDomain && (
+                          <DropdownMenuItem onClick={() => onBindDomain(request)}>
+                            <Edit className="mr-2 h-4 w-4" />
+                            绑定自定义域
+                          </DropdownMenuItem>
+                        )}
+                        {onVerifyDomain && (
+                          <DropdownMenuItem onClick={() => onVerifyDomain(request)}>
+                            <Edit className="mr-2 h-4 w-4" />
+                            校验域名
+                          </DropdownMenuItem>
+                        )}
+                        {onCheckConnectivity && (
+                          <DropdownMenuItem onClick={() => onCheckConnectivity(request)}>
+                            <ExternalLink className="mr-2 h-4 w-4" />
+                            连通性自测
+                          </DropdownMenuItem>
+                        )}
                          {onPreview && request.vercel_assigned_domain && (
                             <DropdownMenuItem onClick={() => onPreview(request)}>
                                 <Eye className="mr-2 h-4 w-4" />

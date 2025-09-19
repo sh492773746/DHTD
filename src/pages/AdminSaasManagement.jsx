@@ -145,6 +145,60 @@ const AdminSaasManagement = () => {
     }
   };
 
+  const handleBindDomain = async (request) => {
+    const domain = window.prompt('输入要绑定的自定义域名（如 example.com 或 shop.example.com）', request.desired_domain || '');
+    if (!domain) return;
+    setIsSubmitting(request.id);
+    try {
+      const res = await bffJson(`/api/admin/tenants/${request.id}/domain/bind`, { token, method: 'POST', body: { domain } });
+      if (res?.ok) {
+        toast({ title: '绑定成功', description: `已提交绑定：${domain}` });
+      } else {
+        toast({ variant: 'destructive', title: '绑定失败', description: res?.error || JSON.stringify(res?.data || res) });
+      }
+    } catch (e) {
+      toast({ variant: 'destructive', title: '绑定失败', description: e.message });
+    } finally {
+      setIsSubmitting(null);
+      fetchRequests();
+    }
+  };
+
+  const handleVerifyDomain = async (request) => {
+    setIsSubmitting(request.id);
+    try {
+      const res = await bffJson(`/api/admin/tenants/${request.id}/domain/verify`, { token, method: 'POST' });
+      if (res?.ok) {
+        toast({ title: '校验成功', description: '域名解析已生效。' });
+      } else {
+        const msg = res?.data?.code || res?.data?.error || res?.error || `status ${res?.status}`;
+        toast({ variant: 'destructive', title: '校验失败', description: String(msg) });
+      }
+    } catch (e) {
+      toast({ variant: 'destructive', title: '校验失败', description: e.message });
+    } finally {
+      setIsSubmitting(null);
+      fetchRequests();
+    }
+  };
+
+  const handleConnectivity = async (request) => {
+    setIsSubmitting(request.id);
+    try {
+      const res = await bffJson(`/api/admin/tenants/${request.id}/connectivity`, { token });
+      if (res?.ok) {
+        const c = res.custom; const v = res.vercel;
+        toast({ title: '连通性结果', description: `自定义域: ${(c?.url||'-')} → ${c?.ok?'OK':'FAIL'}(${c?.status||0}); Vercel域: ${(v?.url||'-')} → ${v?.ok?'OK':'FAIL'}(${v?.status||0})` });
+      } else {
+        toast({ variant: 'destructive', title: '连通性检查失败', description: res?.error || '未知错误' });
+      }
+    } catch (e) {
+      toast({ variant: 'destructive', title: '连通性检查失败', description: e.message });
+    } finally {
+      setIsSubmitting(null);
+    }
+  };
+
   const openRejectDialog = (request) => {
     setDialogState({ ...dialogState, isRejectOpen: true, requestToProcess: request, rejectionReason: '' });
   };
@@ -214,6 +268,9 @@ const AdminSaasManagement = () => {
                 onApprove={handleApprove} 
                 onReject={openRejectDialog} 
                 onDelete={openDeleteDialog}
+                onBindDomain={handleBindDomain}
+                onVerifyDomain={handleVerifyDomain}
+                onCheckConnectivity={handleConnectivity}
               />
             </TabsContent>
             <TabsContent value="active">
@@ -222,6 +279,9 @@ const AdminSaasManagement = () => {
                 isSubmitting={isSubmitting}
                 onDelete={openDeleteDialog}
                 onPreview={handlePreview}
+                onBindDomain={handleBindDomain}
+                onVerifyDomain={handleVerifyDomain}
+                onCheckConnectivity={handleConnectivity}
               />
             </TabsContent>
             <TabsContent value="rejected">
