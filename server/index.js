@@ -341,6 +341,11 @@ app.use('*', async (c, next) => {
 
 // Unified admin guard for all /api/admin/* routes
 app.use('/api/admin/*', async (c, next) => {
+  const p = c.req.path || '';
+  // allow self-check endpoints to pass (still require valid JWT by earlier middleware)
+  if (p === '/api/admin/is-super-admin' || p === '/api/admin/tenant-admins') {
+    return await next();
+  }
   const userId = c.get('userId');
   if (!userId) return c.json({ error: 'unauthorized' }, 401);
   try {
@@ -4666,6 +4671,7 @@ app.get('/api/tenant/resolve', async (c) => {
 // Expose admin role helpers
 app.get('/api/admin/is-super-admin', async (c) => {
   try {
+    if (__isGetLimited(c, 60, 10_000)) return c.json({ isSuperAdmin: false, error: 'too-many-requests' }, 429);
     const userId = c.get('userId');
     if (!userId) return c.json({ isSuperAdmin: false }, 401);
     const ok = await isSuperAdminUser(userId);
@@ -4677,6 +4683,7 @@ app.get('/api/admin/is-super-admin', async (c) => {
 
 app.get('/api/admin/tenant-admins', async (c) => {
   try {
+    if (__isGetLimited(c, 60, 10_000)) return c.json([], 429);
     const userId = c.get('userId');
     if (!userId) return c.json([], 401);
     const gdb = getGlobalDb();
