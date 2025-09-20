@@ -186,6 +186,10 @@ app.use('/api/admin/users*', async (c, next) => {
   if ((c.req.method || 'GET').toUpperCase() === 'GET' && __isGetLimited(c)) return c.json({ error: 'too-many-requests' }, 429);
   await next();
 });
+app.use('/api/admin/tenant-requests/check-domain', async (c, next) => {
+  if ((c.req.method || 'GET').toUpperCase() === 'GET' && __isGetLimited(c)) return c.json({ error: 'too-many-requests' }, 429);
+  await next();
+});
 
 // fetch with timeout & retry for external calls
 async function fetchWithTimeout(url, opts = {}) {
@@ -419,8 +423,13 @@ app.use('*', async (c, next) => {
 // Unified admin guard for all /api/admin/* routes
 app.use('/api/admin/*', async (c, next) => {
   const p = c.req.path || '';
-  // allow self-check endpoints to pass (still require valid JWT by earlier middleware)
-  if (p === '/api/admin/is-super-admin' || p === '/api/admin/tenant-admins' || p === '/api/admin/bootstrap-super-admin') {
+  // allow self-check endpoints and public-safe domain check to pass (still require valid JWT earlier where applicable)
+  if (
+    p === '/api/admin/is-super-admin' ||
+    p === '/api/admin/tenant-admins' ||
+    p === '/api/admin/bootstrap-super-admin' ||
+    p === '/api/admin/tenant-requests/check-domain'
+  ) {
     return await next();
   }
   const userId = c.get('userId');
