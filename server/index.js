@@ -3335,10 +3335,11 @@ app.get('/api/admin/databases', async (c) => {
     const tenantIds = Array.from(new Set(filtered.map(x => x.tenantId).filter(x => x !== null)));
     let owners = new Map();
     let vercelMap = new Map();
+    let desiredDomainMap = new Map();
     if (tenantIds.length) {
       const trs = await gdb.select().from(tenantRequestsTable);
       const byId = new Map((trs || []).map(t => [Number(t.id), t.userId]));
-      const desiredDomainMap = new Map((trs || []).map(t => [Number(t.id), (t.desiredDomain || t.desired_domain || null)]));
+      desiredDomainMap = new Map((trs || []).map(t => [Number(t.id), (t.desiredDomain || t.desired_domain || null)]));
       for (const t of (trs || [])) {
         const vd = t.vercelAssignedDomain || t.vercel_assigned_domain || null;
         if (vd) vercelMap.set(Number(t.id), vd);
