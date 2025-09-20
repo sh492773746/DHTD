@@ -66,7 +66,16 @@ app.use('*', cors({
 // Supabase JWT verification (JOSE JWKS)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
 const supabaseIssuer = supabaseUrl ? `${supabaseUrl.replace(/\/$/, '')}/auth/v1` : null;
-const SUPABASE_JWKS = supabaseUrl ? createRemoteJWKSet(new URL(`${supabaseIssuer}/keys`)) : null;
+function buildSupabaseJwksUrl(){
+  if (!supabaseIssuer) return null;
+  try {
+    const u = new URL(`${supabaseIssuer}/keys`);
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+    if (key) u.searchParams.set('apikey', key);
+    return u;
+  } catch { return null; }
+}
+const SUPABASE_JWKS = supabaseUrl ? createRemoteJWKSet(buildSupabaseJwksUrl()) : null;
 
 const runtimeBranchMap = {};
 
@@ -1458,7 +1467,8 @@ app.get('/api/umami/overview', async (c) => {
       if (!/^https?:\/\//i.test(b)) b = `https://${b}`;
       try {
         const u = new URL(b);
-        if ((u.pathname || '').includes('/websites/')) u.pathname = '/';
+        const pth = (u.pathname || '');
+        if (pth.includes('/websites/') || pth.includes('/share/')) u.pathname = '/';
         let out = u.toString().replace(/\/?$/, '');
         if (!/\/api(\/.+)?$/i.test(out)) out = `${out}/api`;
         return out.replace(/\/$/, '');
