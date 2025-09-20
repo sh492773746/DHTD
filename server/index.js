@@ -151,7 +151,15 @@ function __isGetLimited(c, limit = 30, windowMs = 10_000) {
   __getRate.set(key, bucket);
   return bucket.count > limit;
 }
-app.use(['/api/umami', '/api/notifications', '/api/admin/users'], async (c, next) => {
+app.use('/api/umami/*', async (c, next) => {
+  if ((c.req.method || 'GET').toUpperCase() === 'GET' && __isGetLimited(c)) return c.json({ error: 'too-many-requests' }, 429);
+  await next();
+});
+app.use('/api/notifications/*', async (c, next) => {
+  if ((c.req.method || 'GET').toUpperCase() === 'GET' && __isGetLimited(c)) return c.json({ error: 'too-many-requests' }, 429);
+  await next();
+});
+app.use('/api/admin/users*', async (c, next) => {
   if ((c.req.method || 'GET').toUpperCase() === 'GET' && __isGetLimited(c)) return c.json({ error: 'too-many-requests' }, 429);
   await next();
 });
