@@ -5228,7 +5228,8 @@ app.post('/api/admin/tenants/:id/domain/verify', async (c) => {
     if (teamId) url.searchParams.set('teamId', teamId);
     const resp = await fetchWithTimeout(url, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
     const data = await resp.json().catch(() => ({}));
-    return c.json({ ok: resp.ok, status: resp.status, data });
+    const records = Array.isArray(data?.verification) ? data.verification.map(v => ({ type: v.type, domain: v.domain, value: v.value })) : [];
+    return c.json({ ok: resp.ok, status: resp.status, data, verification: records });
   } catch (e) {
     return c.json({ ok: false, error: e?.message || 'failed' }, 500);
   }
