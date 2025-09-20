@@ -309,7 +309,9 @@ async function ensureTenantRequestsSchemaRaw(client) {
     "alter table tenant_requests add column vercel_assigned_domain text",
     "alter table tenant_requests add column vercel_deployment_status text",
     "alter table tenant_requests add column created_at text",
-    "alter table tenant_requests add column rejection_reason text"
+    "alter table tenant_requests add column rejection_reason text",
+    "alter table tenant_requests add column vercel_subdomain_slug text",
+    "alter table tenant_requests add column fallback_domain text"
   ];
   for (const s of alters) {
     try { await client.execute(s); } catch {}
@@ -793,7 +795,17 @@ async function resolveTenantId(db, host) {
       .from(tenantRequestsTable)
       .where(eq(tenantRequestsTable.desiredDomain, host))
       .limit(1);
-    return row?.[0]?.id ?? 0;
+    if (row && row[0] && row[0].id != null) return row[0].id;
+    // fallback domain match
+    try {
+      const row2 = await db
+        .select({ id: tenantRequestsTable.id })
+        .from(tenantRequestsTable)
+        .where(eq(tenantRequestsTable.fallbackDomain, host))
+        .limit(1);
+      if (row2 && row2[0] && row2[0].id != null) return row2[0].id;
+    } catch {}
+    return 0;
   } catch {
     return 0;
   }
@@ -2518,15 +2530,29 @@ app.post('/api/admin/tenant-requests', async (c) => {
     const userId = c.get('userId');
     if (!userId) return c.json({ error: 'unauthorized' }, 401);
     const body = await c.req.json();
-    const desiredDomain = body?.desiredDomain || body?.desired_domain;
-    const contactWangWang = body?.contactWangWang || body?.contact_wangwang || '';
-    const targetUserId = body?.targetUserId || body?.userId || userId;
-    if (!desiredDomain) return c.json({ error: 'invalid' }, 400);
-    const gdb = getGlobalDb();
-    await ensureTenantRequestsSchemaRaw(getGlobalClient());
-    const now = new Date().toISOString();
-    await gdb.insert(tenantRequestsTable).values({ desiredDomain, userId: targetUserId, contactWangWang, status: 'pending', createdAt: now });
-    return c.json({ ok: true });
+      const desiredDomain = String(body?.desiredDomain || body?.desired_domain || '').trim();
+  const contactWangWang = body?.contactWangWang || body?.contact_wangwang || '';
+  const targetUserId = body?.targetUserId || body?.userId || userId;
+  if (!desiredDomain) return c.json({ error: 'invalid' }, 400);
+  const gdb = getGlobalDb();
+  await ensureTenantRequestsSchemaRaw(getGlobalClient());
+  const now = new Date().toISOString();
+  // generate slug and fallback
+  function toSlug(d){ return d.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,63); }
+  let slug = toSlug(desiredDomain.replace(/\.+/g,'-'));
+  if (!slug) slug = 'site';
+  const fallbackRoot = process.env.FALLBACK_ROOT_DOMAIN || process.env.NEXT_PUBLIC_FALLBACK_ROOT_DOMAIN;
+  const fallbackDomain = fallbackRoot ? `${slug}.${fallbackRoot}` : null;
+  // ensure slug uniqueness (up to 5 tries)
+  try {
+    const existing = await gdb.select().from(tenantRequestsTable);
+    const used = new Set((existing||[]).map(r => (r.vercelSubdomainSlug || r.vercel_subdomain_slug || '').toLowerCase()));
+    if (used.has(slug)) {
+      for (let i=1;i<=5;i++){ const s=`${slug}-${i}`; if(!used.has(s)){ slug=s; break; }}
+    }
+  } catch {}
+  await gdb.insert(tenantRequestsTable).values({ desiredDomain, userId: targetUserId, contactWangWang, status: 'pending', createdAt: now, vercelSubdomainSlug: slug, fallbackDomain, vercelDeploymentStatus: 'reserved' });
+  return c.json({ ok: true, slug, fallbackDomain });
   } catch (e) {
     console.error('POST /api/admin/tenant-requests error', e);
     return c.json({ ok: false }, 500);
@@ -5057,6 +5083,7 @@ app.get('/api/tenants/current', async (c) => {
     return c.json({
       tenantId,
       customDomain: r ? (r.desiredDomain || r.desired_domain || null) : null,
+      fallbackDomain: r ? (r.fallbackDomain || r.fallback_domain || null) : null,
       vercelDomain: r ? (r.vercelAssignedDomain || r.vercel_assigned_domain || null) : null,
       status: r ? (r.status || 'pending') : 'unknown',
       host,
@@ -5125,7 +5152,7 @@ app.post('/api/admin/tenants/:id/domain/verify', async (c) => {
     const id = Number(c.req.param('id')); if (!id) return c.json({ ok: false, error: 'invalid' }, 400);
     const gdb = getGlobalDb(); await ensureTenantRequestsSchemaRaw(getGlobalClient());
     const row = (await gdb.select().from(tenantRequestsTable).where(eq(tenantRequestsTable.id, id)).limit(1))?.[0];
-    const domain = row?.desiredDomain || row?.desired_domain || null;
+    const domain = row?.desiredDomain || row?.desired_domain || row?.fallbackDomain || row?.fallback_domain || null;
     if (!domain) return c.json({ ok: false, error: 'no-domain' }, 400);
     const token = process.env.VERCEL_TOKEN;
     const projectId = process.env.VERCEL_PROJECT_ID;

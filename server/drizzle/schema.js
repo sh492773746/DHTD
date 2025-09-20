@@ -78,6 +78,8 @@ export const tenantRequests = sqliteTable('tenant_requests', {
   vercelDeploymentStatus: text('vercel_deployment_status'),
   createdAt: text('created_at'),
   rejectionReason: text('rejection_reason'),
+  vercelSubdomainSlug: text('vercel_subdomain_slug'),
+  fallbackDomain: text('fallback_domain'),
 });
 
 export const adminUsers = sqliteTable('admin_users', {
