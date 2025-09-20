@@ -317,7 +317,7 @@ app.use('*', async (c, next) => {
         const { payload } = await jwtVerify(token, SUPABASE_JWKS, { issuer: supabaseIssuer });
         userId = payload?.sub || null;
       } else {
-        if (process.env.NODE_ENV !== 'production') {
+        if (process.env.NODE_ENV !== 'production' || process.env.ALLOW_JWT_DECODE_FALLBACK === '1') {
           const payload = decodeJwt(token);
           if (!supabaseIssuer || !payload?.iss || String(payload.iss).startsWith(supabaseIssuer)) {
             userId = payload?.sub || null;
@@ -325,7 +325,7 @@ app.use('*', async (c, next) => {
         }
       }
     } catch {
-      if (process.env.NODE_ENV !== 'production') {
+      if (process.env.NODE_ENV !== 'production' || process.env.ALLOW_JWT_DECODE_FALLBACK === '1') {
         try {
           const payload = decodeJwt(token);
           if (!supabaseIssuer || !payload?.iss || String(payload.iss).startsWith(supabaseIssuer)) {
