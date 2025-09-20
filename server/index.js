@@ -66,16 +66,20 @@ app.use('*', cors({
 // Supabase JWT verification (JOSE JWKS)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
 const supabaseIssuer = supabaseUrl ? `${supabaseUrl.replace(/\/$/, '')}/auth/v1` : null;
-function buildSupabaseJwksUrl(){
-  if (!supabaseIssuer) return null;
+function buildSupabaseJwksConfig(){
+  if (!supabaseIssuer) return { url: null, headers: undefined };
   try {
-    const u = new URL(`${supabaseIssuer}/keys`);
+    const u = new URL(process.env.SUPABASE_JWKS_URL || `${supabaseIssuer}/jwks`);
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
-    if (key) u.searchParams.set('apikey', key);
-    return u;
-  } catch { return null; }
+    if (key) {
+      try { u.searchParams.set('apikey', key); } catch {}
+    }
+    const headers = key ? { apikey: key } : undefined;
+    return { url: u, headers };
+  } catch { return { url: null, headers: undefined }; }
 }
-const SUPABASE_JWKS = supabaseUrl ? createRemoteJWKSet(buildSupabaseJwksUrl()) : null;
+const __JWKS_CFG = buildSupabaseJwksConfig();
+const SUPABASE_JWKS = (supabaseUrl && __JWKS_CFG.url) ? createRemoteJWKSet(__JWKS_CFG.url, { headers: __JWKS_CFG.headers }) : null;
 
 const runtimeBranchMap = {};
 
@@ -352,7 +356,7 @@ app.use('*', async (c, next) => {
 app.use('/api/admin/*', async (c, next) => {
   const p = c.req.path || '';
   // allow self-check endpoints to pass (still require valid JWT by earlier middleware)
-  if (p === '/api/admin/is-super-admin' || p === '/api/admin/tenant-admins') {
+  if (p === '/api/admin/is-super-admin' || p === '/api/admin/tenant-admins' || p === '/api/admin/bootstrap-super-admin') {
     return await next();
   }
   const userId = c.get('userId');
