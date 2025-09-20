@@ -67,20 +67,27 @@ app.use('*', cors({
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
 const supabaseIssuer = supabaseUrl ? `${supabaseUrl.replace(/\/$/, '')}/auth/v1` : null;
 function buildSupabaseJwksConfig(){
-  if (!supabaseIssuer) return { url: null, headers: undefined };
+  if (!supabaseIssuer) return { url: null, headers: undefined, fallbackUrl: null, fallbackHeaders: undefined };
   try {
-    // Prefer /keys (official Supabase JWKS endpoint); allow override via SUPABASE_JWKS_URL
-    const u = new URL(process.env.SUPABASE_JWKS_URL || `${supabaseIssuer}/keys`);
+    const primary = new URL(process.env.SUPABASE_JWKS_URL || `${supabaseIssuer}/keys`);
+    const fallback = new URL(`${supabaseIssuer}/jwks`);
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
     if (key) {
-      try { u.searchParams.set('apikey', key); } catch {}
+      try { primary.searchParams.set('apikey', key); } catch {}
+      try { fallback.searchParams.set('apikey', key); } catch {}
     }
-    const headers = key ? { apikey: key } : undefined;
-    return { url: u, headers };
-  } catch { return { url: null, headers: undefined }; }
+    const headers = key ? { apikey: key, Authorization: `Bearer ${key}` } : undefined;
+    return { url: primary, headers, fallbackUrl: fallback, fallbackHeaders: headers };
+  } catch { return { url: null, headers: undefined, fallbackUrl: null, fallbackHeaders: undefined }; }
 }
 const __JWKS_CFG = buildSupabaseJwksConfig();
-const SUPABASE_JWKS = (supabaseUrl && __JWKS_CFG.url) ? createRemoteJWKSet(__JWKS_CFG.url, { headers: __JWKS_CFG.headers }) : null; // tries /keys by default
+let SUPABASE_JWKS = null;
+if (supabaseUrl && __JWKS_CFG.url) {
+  try {
+    SUPABASE_JWKS = createRemoteJWKSet(__JWKS_CFG.url, { headers: __JWKS_CFG.headers });
+  } catch {}
+  // Optional: probe fallback /jwks if primary fails at runtime (handled in debug-verify)
+}
 
 const runtimeBranchMap = {};
 
@@ -420,9 +427,8 @@ app.get('/api/auth/debug-config', async (c) => {
       if (__JWKS_CFG && __JWKS_CFG.url) {
         const res = await fetchWithTimeout(__JWKS_CFG.url, { headers: __JWKS_CFG.headers });
         info.jwksProbe = { ok: res.ok, status: res.status };
-        if (!res.ok && String(__JWKS_CFG.url).includes('/keys')) {
-          const u2 = new URL(String(__JWKS_CFG.url).replace('/keys','/jwks'));
-          const res2 = await fetchWithTimeout(u2, { headers: __JWKS_CFG.headers });
+        if (!res.ok && __JWKS_CFG.fallbackUrl) {
+          const res2 = await fetchWithTimeout(__JWKS_CFG.fallbackUrl, { headers: __JWKS_CFG.fallbackHeaders });
           info.jwksProbe = { ok: res2.ok, status: res2.status, triedFallbackJwks: true };
         }
       }
@@ -454,6 +460,15 @@ app.get('/api/auth/debug-verify', async (c) => {
       const { payload } = await jwtVerify(token, SUPABASE_JWKS, { issuer: supabaseIssuer });
       out.ok = true; out.userId = payload?.sub || null;
       return c.json(out);
+    }
+    // If primary JWKS failed, try fallback /jwks
+    if (__JWKS_CFG && __JWKS_CFG.fallbackUrl) {
+      try {
+        const jwks2 = createRemoteJWKSet(__JWKS_CFG.fallbackUrl, { headers: __JWKS_CFG.fallbackHeaders });
+        const { payload } = await jwtVerify(token, jwks2, { issuer: supabaseIssuer });
+        out.ok = true; out.userId = payload?.sub || null; out.triedFallbackJwks = true;
+        return c.json(out);
+      } catch {}
     }
     out.error = 'no-jwks';
     return c.json(out, 500);
