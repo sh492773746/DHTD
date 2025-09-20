@@ -2570,6 +2570,30 @@ app.post('/api/admin/tenant-requests/:id/approve', async (c) => {
     const pdata = await prov.json().catch(() => ({}));
     await gdb.update(tenantRequestsTable).set({ status: 'active', vercelDeploymentStatus: 'provisioned' }).where(eq(tenantRequestsTable.id, id));
     const reread = (await gdb.select().from(tenantRequestsTable).where(eq(tenantRequestsTable.id, id)).limit(1))?.[0] || null;
+
+    // 2.6) Add desired domain to Vercel project (custom domain)
+    let vercelAdd = null;
+    try {
+      const token = process.env.VERCEL_TOKEN;
+      const projectId = process.env.VERCEL_PROJECT_ID;
+      const teamId = process.env.VERCEL_TEAM_ID;
+      const desired = reread?.desiredDomain || reread?.desired_domain || null;
+      if (token && projectId && desired) {
+        const url = new URL(`https://api.vercel.com/v10/projects/${projectId}/domains`);
+        if (teamId) url.searchParams.set('teamId', teamId);
+        const resp = await fetchWithTimeout(url, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: desired })
+        });
+        const data = await resp.json().catch(() => ({}));
+        vercelAdd = { ok: resp.ok, status: resp.status, data };
+        // Persist projectId, keep vercelAssignedDomain as fallback for preview convenience
+        const toSet = { vercelProjectId: projectId, vercelDeploymentStatus: resp.ok ? 'added' : 'pending' };
+        try { await gdb.update(tenantRequestsTable).set(toSet).where(eq(tenantRequestsTable.id, id)); } catch {}
+      }
+    } catch {}
+
     // Grant tenant-admin role to the owner (single-tenant-only)
     try {
       const ownerRow = await gdb.select().from(tenantRequestsTable).where(eq(tenantRequestsTable.id, id)).limit(1);
@@ -2636,7 +2660,7 @@ app.post('/api/admin/tenant-requests/:id/approve', async (c) => {
         } catch {}
       }
     } catch {}
-    return c.json({ ok: true, provision: pdata, request: reread });
+    return c.json({ ok: true, provision: pdata, request: reread, vercelAdd });
   } catch (e) {
     console.error('POST /api/admin/tenant-requests/:id/approve error', e);
     return c.json({ ok: false }, 500);

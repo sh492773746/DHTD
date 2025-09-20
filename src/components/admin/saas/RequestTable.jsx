@@ -66,14 +66,14 @@ const RequestTable = ({ requests, isSubmitting, onApprove, onReject, onDelete, o
                 </a>
               </TableCell>
               <TableCell>
-                {request.vercel_assigned_domain ? (
+                {request.vercel_assigned_domain || request.fallback_domain ? (
                   <a 
-                    href={`https://${request.vercel_assigned_domain}`} 
+                    href={`https://${request.vercel_assigned_domain || request.fallback_domain}`} 
                     target="_blank" 
                     rel="noopener noreferrer" 
                     className="text-gray-500 hover:underline flex items-center gap-1"
                   >
-                    {request.vercel_assigned_domain} <ExternalLink className="h-4 w-4" />
+                    {(request.vercel_assigned_domain || request.fallback_domain)} <ExternalLink className="h-4 w-4" />
                   </a>
                 ) : 'N/A'}
               </TableCell>
