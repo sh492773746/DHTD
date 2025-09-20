@@ -1658,36 +1658,44 @@ app.get('/api/umami/overview', async (c) => {
     const headers = { 'Accept': 'application/json', 'Authorization': `Bearer ${apiKey}` };
 
     const isV1 = /\/v\d+$/i.test(apiBase);
-    const pvPath = isV1 ? `/websites/${encodeURIComponent(websiteId)}/metrics` : `/websites/${encodeURIComponent(websiteId)}/pageviews`;
-    const pvParams = isV1 ? `?startAt=${startAt}&endAt=${endAt}&type=pageviews&unit=day` : `?startAt=${startAt}&endAt=${endAt}&unit=day`;
-    const statsPath = `/websites/${encodeURIComponent(websiteId)}/stats`;
-    const pageviewsUrl = `${apiBase}${pvPath}${pvParams}`;
-    const statsUrl = `${apiBase}${statsPath}?startAt=${startAt}&endAt=${endAt}`;
+    let pageviewsUrl = `${apiBase}/websites/${encodeURIComponent(websiteId)}/pageviews?startAt=${startAt}&endAt=${endAt}&unit=day`;
+    let visitorsUrl = null;
+    if (isV1) {
+      pageviewsUrl = `${apiBase}/websites/${encodeURIComponent(websiteId)}/metrics?startAt=${startAt}&endAt=${endAt}&type=pageviews&unit=day`;
+      visitorsUrl = `${apiBase}/websites/${encodeURIComponent(websiteId)}/metrics?startAt=${startAt}&endAt=${endAt}&type=visitors&unit=day`;
+    }
+    const statsUrl = `${apiBase}/websites/${encodeURIComponent(websiteId)}/stats?startAt=${startAt}&endAt=${endAt}`;
 
-    const [pvRes, statsRes] = await Promise.all([
+    const responses = await Promise.all([
       fetchWithTimeout(pageviewsUrl, { headers }),
+      visitorsUrl ? fetchWithTimeout(visitorsUrl, { headers }) : Promise.resolve(null),
       fetchWithTimeout(statsUrl, { headers }),
     ]);
+    const pvRes = responses[0];
+    const viRes = responses[1];
+    const statsRes = responses[2];
     if (!pvRes.ok) throw new Error(`Umami pageviews error ${pvRes.status}`);
     if (!statsRes.ok) throw new Error(`Umami stats error ${statsRes.status}`);
 
     const pvJson = await pvRes.json();
+    const viJson = viRes ? await viRes.json() : null;
     const statsJson = await statsRes.json();
 
-    const pageviewsSeries = Array.isArray(pvJson?.pageviews) ? pvJson.pageviews : [];
-    const sessionsSeries = Array.isArray(pvJson?.sessions) ? pvJson.sessions : (Array.isArray(pvJson?.visitors) ? pvJson.visitors : []);
+    const isV1Resp = !!viJson && Array.isArray(viJson?.data);
+    const pageviewsSeries = Array.isArray(pvJson?.pageviews) ? pvJson.pageviews : (Array.isArray(pvJson?.data) ? pvJson.data : []);
+    const visitorsSeries = isV1Resp ? viJson.data : (Array.isArray(pvJson?.visitors) ? pvJson.visitors : []);
 
     const toDate = (t) => new Date(Number(t)).toISOString().slice(0, 10);
 
     const pvMap = Object.create(null);
     for (const p of pageviewsSeries) {
-      const d = toDate(p.t ?? p.time ?? 0);
-      pvMap[d] = Number(p.y || p.value || 0);
+      const d = toDate(p.t ?? p.time ?? p.timestamp ?? 0);
+      pvMap[d] = Number(p.y || p.value || p.count || 0);
     }
     const svMap = Object.create(null);
-    for (const s of sessionsSeries) {
-      const d = toDate(s.t ?? s.time ?? 0);
-      svMap[d] = Number(s.y || s.value || 0);
+    for (const s of visitorsSeries) {
+      const d = toDate(s.t ?? s.time ?? s.timestamp ?? 0);
+      svMap[d] = Number(s.y || s.value || s.count || 0);
     }
 
     const dayMs = 24 * 3600 * 1000;
