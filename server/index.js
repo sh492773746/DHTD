@@ -69,7 +69,8 @@ const supabaseIssuer = supabaseUrl ? `${supabaseUrl.replace(/\/$/, '')}/auth/v1`
 function buildSupabaseJwksConfig(){
   if (!supabaseIssuer) return { url: null, headers: undefined };
   try {
-    const u = new URL(process.env.SUPABASE_JWKS_URL || `${supabaseIssuer}/jwks`);
+    // Prefer /keys (official Supabase JWKS endpoint); allow override via SUPABASE_JWKS_URL
+    const u = new URL(process.env.SUPABASE_JWKS_URL || `${supabaseIssuer}/keys`);
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
     if (key) {
       try { u.searchParams.set('apikey', key); } catch {}
@@ -79,7 +80,7 @@ function buildSupabaseJwksConfig(){
   } catch { return { url: null, headers: undefined }; }
 }
 const __JWKS_CFG = buildSupabaseJwksConfig();
-const SUPABASE_JWKS = (supabaseUrl && __JWKS_CFG.url) ? createRemoteJWKSet(__JWKS_CFG.url, { headers: __JWKS_CFG.headers }) : null;
+const SUPABASE_JWKS = (supabaseUrl && __JWKS_CFG.url) ? createRemoteJWKSet(__JWKS_CFG.url, { headers: __JWKS_CFG.headers }) : null; // tries /keys by default
 
 const runtimeBranchMap = {};
 
@@ -419,6 +420,11 @@ app.get('/api/auth/debug-config', async (c) => {
       if (__JWKS_CFG && __JWKS_CFG.url) {
         const res = await fetchWithTimeout(__JWKS_CFG.url, { headers: __JWKS_CFG.headers });
         info.jwksProbe = { ok: res.ok, status: res.status };
+        if (!res.ok && String(__JWKS_CFG.url).includes('/keys')) {
+          const u2 = new URL(String(__JWKS_CFG.url).replace('/keys','/jwks'));
+          const res2 = await fetchWithTimeout(u2, { headers: __JWKS_CFG.headers });
+          info.jwksProbe = { ok: res2.ok, status: res2.status, triedFallbackJwks: true };
+        }
       }
     } catch (e) {
       info.jwksProbe = { ok: false, error: String((e && e.message) || e) };
