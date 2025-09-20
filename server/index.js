@@ -423,13 +423,20 @@ app.use('*', async (c, next) => {
 // Unified admin guard for all /api/admin/* routes
 app.use('/api/admin/*', async (c, next) => {
   const p = c.req.path || '';
+  const m = (c.req.method || 'GET').toUpperCase();
   // allow self-check endpoints and public-safe domain check to pass (still require valid JWT earlier where applicable)
   if (
     p === '/api/admin/is-super-admin' ||
     p === '/api/admin/tenant-admins' ||
     p === '/api/admin/bootstrap-super-admin' ||
-    p === '/api/admin/tenant-requests/check-domain'
+    p === '/api/admin/tenant-requests/check-domain' ||
+    (p === '/api/admin/tenant-requests' && m === 'POST')
   ) {
+    // for POST /tenant-requests require login but不要求超管
+    if (p === '/api/admin/tenant-requests' && m === 'POST') {
+      const uid = c.get('userId');
+      if (!uid) return c.json({ error: 'unauthorized' }, 401);
+    }
     return await next();
   }
   const userId = c.get('userId');
