@@ -1507,7 +1507,7 @@ app.get('/api/umami/stats', async (c) => {
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const startAt = startOfToday - (days - 1) * 24 * 3600 * 1000;
 
-    const rawBase = process.env.UMAMI_BASE_URL || process.env.UMAMI_API_BASE || 'https://us.umami.is/api';
+    const rawBase = process.env.UMAMI_BASE_URL || process.env.UMAMI_API_BASE || 'https://api.umami.is/v1';
     const websiteId = process.env.UMAMI_WEBSITE_ID || process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID;
     const apiKey = process.env.UMAMI_API_KEY || process.env.NEXT_PUBLIC_UMAMI_API_KEY;
 
@@ -1517,21 +1517,30 @@ app.get('/api/umami/stats', async (c) => {
 
     function normalizeBase(base) {
       let b = String(base || '').trim();
-      if (!b) return 'https://us.umami.is/api';
+      if (!b) return 'https://api.umami.is/v1';
       if (!/^https?:\/\//i.test(b)) b = `https://${b}`;
-      // If user passed something like us.umami.is/websites/<id>, strip trailing path and ensure /api
       try {
         const u = new URL(b);
+        const host = (u.host || '').toLowerCase();
         const path = u.pathname || '';
-        if (path.includes('/websites/')) {
+        // Cloud domains -> official API
+        if (host === 'api.umami.is') {
+          if (!/^\/v\d+/.test(path)) u.pathname = '/v1';
+          return u.toString().replace(/\/?$/, '');
+        }
+        if (host.endsWith('.umami.is') && !host.startsWith('api.')) {
+          return 'https://api.umami.is/v1';
+        }
+        // Self-hosted: strip share/websites and ensure /api
+        if (path.includes('/websites/') || path.includes('/share/')) {
           u.pathname = '/';
         }
         let out = u.toString().replace(/\/?$/, '');
-        if (!/\/api(\/.+)?$/i.test(out)) out = `${out}/api`;
+        if (!/\/api(\/.+)?$/i.test(out) && !/\/v\d+(\/.+)?$/i.test(out)) out = `${out}/api`;
         return out.replace(/\/$/, '');
       } catch {
-        // Fallback
-        if (!/\/api(\/.+)?$/i.test(b)) b = `${b.replace(/\/$/, '')}/api`;
+        if (/\.umami\.is/i.test(b) && !/api\.umami\.is/i.test(b)) return 'https://api.umami.is/v1';
+        if (!/\/api(\/.+)?$/i.test(b) && !/\/v\d+(\/.+)?$/i.test(b)) b = `${b.replace(/\/$/, '')}/api`;
         return b.replace(/\/$/, '');
       }
     }
@@ -1539,8 +1548,12 @@ app.get('/api/umami/stats', async (c) => {
     const apiBase = normalizeBase(rawBase);
     const headers = { 'Accept': 'application/json', 'Authorization': `Bearer ${apiKey}` };
 
-    const pageviewsUrl = `${apiBase}/websites/${encodeURIComponent(websiteId)}/pageviews?startAt=${startAt}&endAt=${endAt}&unit=day`;
-    const statsUrl = `${apiBase}/websites/${encodeURIComponent(websiteId)}/stats?startAt=${startAt}&endAt=${endAt}`;
+    const isV1 = /\/v\d+$/i.test(apiBase);
+    const pvPath = isV1 ? `/websites/${encodeURIComponent(websiteId)}/metrics` : `/websites/${encodeURIComponent(websiteId)}/pageviews`;
+    const pvParams = isV1 ? `?startAt=${startAt}&endAt=${endAt}&type=pageviews&unit=day` : `?startAt=${startAt}&endAt=${endAt}&unit=day`;
+    const statsPath = `/websites/${encodeURIComponent(websiteId)}/stats`;
+    const pageviewsUrl = `${apiBase}${pvPath}${pvParams}`;
+    const statsUrl = `${apiBase}${statsPath}?startAt=${startAt}&endAt=${endAt}`;
 
     const [pvRes, statsRes] = await Promise.all([
       fetchWithTimeout(pageviewsUrl, { headers }),
@@ -1616,32 +1629,40 @@ app.get('/api/umami/overview', async (c) => {
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const startAt = startOfToday - (days - 1) * 24 * 3600 * 1000;
 
-    const rawBase = process.env.UMAMI_BASE_URL || process.env.UMAMI_API_BASE || 'https://us.umami.is/api';
+    const rawBase = process.env.UMAMI_BASE_URL || process.env.UMAMI_API_BASE || 'https://api.umami.is/v1';
     const websiteId = process.env.UMAMI_WEBSITE_ID || process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID;
     const apiKey = process.env.UMAMI_API_KEY || process.env.NEXT_PUBLIC_UMAMI_API_KEY;
     if (!websiteId || !apiKey) return c.json({ error: 'Umami API not configured' }, 500);
 
     function normalizeBase(base) {
       let b = String(base || '').trim();
-      if (!b) return 'https://us.umami.is/api';
+      if (!b) return 'https://api.umami.is/v1';
       if (!/^https?:\/\//i.test(b)) b = `https://${b}`;
       try {
         const u = new URL(b);
+        const host = (u.host || '').toLowerCase();
         const pth = (u.pathname || '');
+        if (host === 'api.umami.is') { if (!/^\/v\d+/.test(pth)) u.pathname = '/v1'; return u.toString().replace(/\/?$/, ''); }
+        if (host.endsWith('.umami.is') && !host.startsWith('api.')) return 'https://api.umami.is/v1';
         if (pth.includes('/websites/') || pth.includes('/share/')) u.pathname = '/';
         let out = u.toString().replace(/\/?$/, '');
-        if (!/\/api(\/.+)?$/i.test(out)) out = `${out}/api`;
+        if (!/\/api(\/.+)?$/i.test(out) && !/\/v\d+(\/.+)?$/i.test(out)) out = `${out}/api`;
         return out.replace(/\/$/, '');
       } catch {
-        if (!/\/api(\/.+)?$/i.test(b)) b = `${b.replace(/\/$/, '')}/api`;
+        if (/\.umami\.is/i.test(b) && !/api\.umami\.is/i.test(b)) return 'https://api.umami.is/v1';
+        if (!/\/api(\/.+)?$/i.test(b) && !/\/v\d+(\/.+)?$/i.test(b)) b = `${b.replace(/\/$/, '')}/api`;
         return b.replace(/\/$/, '');
       }
     }
     const apiBase = normalizeBase(rawBase);
     const headers = { 'Accept': 'application/json', 'Authorization': `Bearer ${apiKey}` };
 
-    const pageviewsUrl = `${apiBase}/websites/${encodeURIComponent(websiteId)}/pageviews?startAt=${startAt}&endAt=${endAt}&unit=day`;
-    const statsUrl = `${apiBase}/websites/${encodeURIComponent(websiteId)}/stats?startAt=${startAt}&endAt=${endAt}`;
+    const isV1 = /\/v\d+$/i.test(apiBase);
+    const pvPath = isV1 ? `/websites/${encodeURIComponent(websiteId)}/metrics` : `/websites/${encodeURIComponent(websiteId)}/pageviews`;
+    const pvParams = isV1 ? `?startAt=${startAt}&endAt=${endAt}&type=pageviews&unit=day` : `?startAt=${startAt}&endAt=${endAt}&unit=day`;
+    const statsPath = `/websites/${encodeURIComponent(websiteId)}/stats`;
+    const pageviewsUrl = `${apiBase}${pvPath}${pvParams}`;
+    const statsUrl = `${apiBase}${statsPath}?startAt=${startAt}&endAt=${endAt}`;
 
     const [pvRes, statsRes] = await Promise.all([
       fetchWithTimeout(pageviewsUrl, { headers }),
