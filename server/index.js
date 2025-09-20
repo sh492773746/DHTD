@@ -391,6 +391,44 @@ app.get('/api/debug/tenant', async (c) => {
   }
 });
 
+// Gated auth debug (issuer & JWKS) for production diagnostics
+app.get('/api/auth/debug-config', async (c) => {
+  if (process.env.ENABLE_AUTH_DEBUG !== '1') return c.json({ ok: false }, 404);
+  try {
+    const info = {
+      supabaseUrl: supabaseUrl || null,
+      supabaseIssuer: supabaseIssuer || null,
+      jwksUrl: null,
+      apikeyInQuery: false,
+      apikeyHeader: false,
+      jwksProbe: null,
+    };
+    try {
+      if (__JWKS_CFG && __JWKS_CFG.url) {
+        const u = new URL(__JWKS_CFG.url);
+        const hasApiKey = u.searchParams.has('apikey');
+        if (hasApiKey) u.searchParams.set('apikey', '[set]');
+        info.jwksUrl = u.toString();
+        info.apikeyInQuery = hasApiKey;
+      }
+      if (__JWKS_CFG && __JWKS_CFG.headers && __JWKS_CFG.headers.apikey) {
+        info.apikeyHeader = true;
+      }
+    } catch {}
+    try {
+      if (__JWKS_CFG && __JWKS_CFG.url) {
+        const res = await fetchWithTimeout(__JWKS_CFG.url, { headers: __JWKS_CFG.headers });
+        info.jwksProbe = { ok: res.ok, status: res.status };
+      }
+    } catch (e) {
+      info.jwksProbe = { ok: false, error: String((e && e.message) || e) };
+    }
+    return c.json(info);
+  } catch {
+    return c.json({ ok: false }, 500);
+  }
+});
+
 app.post('/api/uploads/post-images', async (c) => {
   try {
     const userId = c.get('userId');
