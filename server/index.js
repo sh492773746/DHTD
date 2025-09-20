@@ -3079,6 +3079,23 @@ app.post('/api/admin/tenants/:id/provision', async (c) => {
     await client.execute("insert into page_content(tenant_id, page, section, position, content) values (?, 'home', 'announcements', 0, ?)", [
       tenantId, JSON.stringify({ text: '🎉 分站已开通，欢迎体验！' })
     ]);
+    // 2.6) Seed tenant app_settings defaults (independent mode + site name)
+    try {
+      await ensureDefaultSettings(await getTursoClientForTenant(tenantId), tenantId);
+      const sdb = await getTursoClientForTenant(tenantId);
+      const kv = [
+        { key: 'site_name', value: `分站 #${tenantId}` },
+        { key: 'social_forum_mode', value: 'independent' }
+      ];
+      for (const {key,value} of kv) {
+        const exists = await sdb.select().from(appSettings).where(and(eq(appSettings.tenantId, tenantId), eq(appSettings.key, key))).limit(1);
+        if (!exists || exists.length === 0) {
+          await sdb.insert(appSettings).values({ tenantId, key, value });
+        } else {
+          await sdb.update(appSettings).set({ value }).where(and(eq(appSettings.tenantId, tenantId), eq(appSettings.key, key)));
+        }
+      }
+    } catch {}
 
     // 3) Persist mapping in branches table (global DB)
     const gdb = getGlobalDb();
