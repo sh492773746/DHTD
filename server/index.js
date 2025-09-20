@@ -67,18 +67,20 @@ app.use('*', cors({
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
 const supabaseIssuer = supabaseUrl ? `${supabaseUrl.replace(/\/$/, '')}/auth/v1` : null;
 function buildSupabaseJwksConfig(){
-  if (!supabaseIssuer) return { url: null, headers: undefined, fallbackUrl: null, fallbackHeaders: undefined };
+  if (!supabaseIssuer) return { url: null, headers: undefined, fallbackUrl: null, fallbackHeaders: undefined, oidcUrl: null };
   try {
     const primary = new URL(process.env.SUPABASE_JWKS_URL || `${supabaseIssuer}/keys`);
     const fallback = new URL(`${supabaseIssuer}/jwks`);
+    const oidc = new URL(`${supabaseIssuer}/oidc/.well-known/jwks.json`);
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
     if (key) {
       try { primary.searchParams.set('apikey', key); } catch {}
       try { fallback.searchParams.set('apikey', key); } catch {}
+      // OIDC well-known通常不需要apikey，但保留header不影响
     }
     const headers = key ? { apikey: key, Authorization: `Bearer ${key}` } : undefined;
-    return { url: primary, headers, fallbackUrl: fallback, fallbackHeaders: headers };
-  } catch { return { url: null, headers: undefined, fallbackUrl: null, fallbackHeaders: undefined }; }
+    return { url: primary, headers, fallbackUrl: fallback, fallbackHeaders: headers, oidcUrl: oidc, oidcHeaders: headers };
+  } catch { return { url: null, headers: undefined, fallbackUrl: null, fallbackHeaders: undefined, oidcUrl: null, oidcHeaders: undefined }; }
 }
 const __JWKS_CFG = buildSupabaseJwksConfig();
 let SUPABASE_JWKS = null;
@@ -430,6 +432,10 @@ app.get('/api/auth/debug-config', async (c) => {
         if (!res.ok && __JWKS_CFG.fallbackUrl) {
           const res2 = await fetchWithTimeout(__JWKS_CFG.fallbackUrl, { headers: __JWKS_CFG.fallbackHeaders });
           info.jwksProbe = { ok: res2.ok, status: res2.status, triedFallbackJwks: true };
+          if (!res2.ok && __JWKS_CFG.oidcUrl) {
+            const res3 = await fetchWithTimeout(__JWKS_CFG.oidcUrl, { headers: __JWKS_CFG.oidcHeaders });
+            info.jwksProbe = { ok: res3.ok, status: res3.status, triedFallbackJwks: true, triedOidcWellKnown: true };
+          }
         }
       }
     } catch (e) {
@@ -467,6 +473,15 @@ app.get('/api/auth/debug-verify', async (c) => {
         const jwks2 = createRemoteJWKSet(__JWKS_CFG.fallbackUrl, { headers: __JWKS_CFG.fallbackHeaders });
         const { payload } = await jwtVerify(token, jwks2, { issuer: supabaseIssuer });
         out.ok = true; out.userId = payload?.sub || null; out.triedFallbackJwks = true;
+        return c.json(out);
+      } catch {}
+    }
+    // Last resort: try OIDC well-known
+    if (__JWKS_CFG && __JWKS_CFG.oidcUrl) {
+      try {
+        const jwks3 = createRemoteJWKSet(__JWKS_CFG.oidcUrl, { headers: __JWKS_CFG.oidcHeaders });
+        const { payload } = await jwtVerify(token, jwks3, { issuer: supabaseIssuer });
+        out.ok = true; out.userId = payload?.sub || null; out.triedOidcWellKnown = true;
         return c.json(out);
       } catch {}
     }
