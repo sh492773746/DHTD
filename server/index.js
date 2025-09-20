@@ -2657,6 +2657,31 @@ app.post('/api/admin/tenant-requests/:id/reject', async (c) => {
   }
 });
 
+// Backfill slug & fallback domain for existing tenant request
+app.post('/api/admin/tenant-requests/:id/backfill-fallback', async (c) => {
+  try {
+    const auth = requireAdmin(c);
+    if (!auth.ok) return c.json({ ok: false, error: auth.reason }, 401);
+    const isAdmin = await isSuperAdminUser(auth.userId);
+    if (!isAdmin) return c.json({ ok: false, error: 'forbidden' }, 403);
+    const id = Number(c.req.param('id')); if (!id) return c.json({ ok: false, error: 'invalid' }, 400);
+    const gdb = getGlobalDb(); await ensureTenantRequestsSchemaRaw(getGlobalClient());
+    const row = (await gdb.select().from(tenantRequestsTable).where(eq(tenantRequestsTable.id, id)).limit(1))?.[0] || null;
+    if (!row) return c.json({ ok: false, error: 'not-found' }, 404);
+    const desired = row.desiredDomain || row.desired_domain || '';
+    function toSlug(d){ return String(d||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,63); }
+    let slug = row.vercelSubdomainSlug || row.vercel_subdomain_slug || toSlug(String(desired).replace(/\.+/g,'-')) || 'site';
+    const fallbackRoot = process.env.FALLBACK_ROOT_DOMAIN || process.env.NEXT_PUBLIC_FALLBACK_ROOT_DOMAIN;
+    if (!fallbackRoot) return c.json({ ok: false, error: 'missing-fallback-root' }, 500);
+    const fallbackDomain = `${slug}.${fallbackRoot}`;
+    await gdb.update(tenantRequestsTable).set({ vercelSubdomainSlug: slug, fallbackDomain }).where(eq(tenantRequestsTable.id, id));
+    return c.json({ ok: true, id, slug, fallbackDomain });
+  } catch (e) {
+    console.error('POST /api/admin/tenant-requests/:id/backfill-fallback error', e);
+    return c.json({ ok: false }, 500);
+  }
+});
+
 app.delete('/api/admin/tenant-requests/:id', async (c) => {
   try {
     const userId = c.get('userId'); if (!userId) return c.json({ error: 'unauthorized' }, 401);
