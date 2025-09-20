@@ -76,7 +76,7 @@ function buildSupabaseJwksConfig(){
     if (key) {
       try { primary.searchParams.set('apikey', key); } catch {}
       try { fallback.searchParams.set('apikey', key); } catch {}
-      // OIDC well-known通常不需要apikey，但保留header不影响
+      try { oidc.searchParams.set('apikey', key); } catch {}
     }
     const headers = key ? { apikey: key, Authorization: `Bearer ${key}` } : undefined;
     return { url: primary, headers, fallbackUrl: fallback, fallbackHeaders: headers, oidcUrl: oidc, oidcHeaders: headers };
@@ -208,6 +208,31 @@ async function fetchWithTimeout(url, opts = {}) {
   throw lastErr;
 }
 
+// token verify cache and Supabase /auth/v1/user introspection fallback
+const __tokenVerifyCache = new Map();
+function __getCachedUserIdForToken(token) {
+  const x = __tokenVerifyCache.get(token);
+  if (!x) return null;
+  if (Date.now() > x.expireAt) { __tokenVerifyCache.delete(token); return null; }
+  return x.userId || null;
+}
+function __setCachedUserIdForToken(token, userId, ttlMs = 60_000) {
+  try { __tokenVerifyCache.set(token, { userId, expireAt: Date.now() + ttlMs }); } catch {}
+}
+async function supabaseIntrospectUser(token) {
+  try {
+    if (!supabaseIssuer) return null;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+    if (!key) return null;
+    const url = `${supabaseIssuer}/user`;
+    const res = await fetchWithTimeout(url, { headers: { apikey: key, Authorization: `Bearer ${token}` } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const id = data?.id || data?.user?.id || data?.sub || null;
+    return id || null;
+  } catch { return null; }
+}
+
 async function getBranchUrlForTenant(tenantId) {
   if (!tenantId) return null;
   try {
@@ -336,17 +361,46 @@ app.use('*', async (c, next) => {
   if (auth?.startsWith('Bearer ')) {
     const token = auth.slice(7);
     try {
-      if (SUPABASE_JWKS && supabaseIssuer) {
-        const { payload } = await jwtVerify(token, SUPABASE_JWKS, { issuer: supabaseIssuer });
-        userId = payload?.sub || null;
-      } else {
-        if (process.env.NODE_ENV !== 'production' || process.env.ALLOW_JWT_DECODE_FALLBACK === '1') {
+      const cached = __getCachedUserIdForToken(token);
+      if (cached) { userId = cached; }
+      else if (SUPABASE_JWKS && supabaseIssuer) {
+        try {
+          const { payload } = await jwtVerify(token, SUPABASE_JWKS, { issuer: supabaseIssuer });
+          userId = payload?.sub || null;
+        } catch (e1) {
+          // try fallback /jwks
+          if (__JWKS_CFG && __JWKS_CFG.fallbackUrl) {
+            try {
+              const jwks2 = createRemoteJWKSet(__JWKS_CFG.fallbackUrl, { headers: __JWKS_CFG.fallbackHeaders });
+              const { payload } = await jwtVerify(token, jwks2, { issuer: supabaseIssuer });
+              userId = payload?.sub || null;
+            } catch (e2) {
+              // last resort: OIDC well-known
+              if (__JWKS_CFG && __JWKS_CFG.oidcUrl) {
+                try {
+                  const jwks3 = createRemoteJWKSet(__JWKS_CFG.oidcUrl, { headers: __JWKS_CFG.oidcHeaders });
+                  const { payload } = await jwtVerify(token, jwks3, { issuer: supabaseIssuer });
+                  userId = payload?.sub || null;
+                } catch {}
+              }
+            }
+          }
+        }
+      }
+      if (!userId) {
+        // server-side trusted introspection
+        const id = await supabaseIntrospectUser(token);
+        if (id) userId = id;
+      }
+      if (!userId && (process.env.NODE_ENV !== 'production' || process.env.ALLOW_JWT_DECODE_FALLBACK === '1')) {
+        try {
           const payload = decodeJwt(token);
           if (!supabaseIssuer || !payload?.iss || String(payload.iss).startsWith(supabaseIssuer)) {
             userId = payload?.sub || null;
           }
-        }
+        } catch {}
       }
+      if (userId) __setCachedUserIdForToken(token, userId);
     } catch {
       if (process.env.NODE_ENV !== 'production' || process.env.ALLOW_JWT_DECODE_FALLBACK === '1') {
         try {
