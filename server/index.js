@@ -3318,7 +3318,7 @@ app.get('/api/admin/databases', async (c) => {
     const list = await listAllDatabases();
     // Try to derive tenantId from name pattern tenant-{id}
     const withTenant = (list || []).map(d => {
-      const m = /^tenant-(\d+)$/i.exec(d.name || '');
+      const m = /tenant-(\d+)/i.exec(d.name || '');
       const tenantId = m ? Number(m[1]) : null;
       // Attempt to derive a vercel-style domain from hostname (if looks like *.turso.io => not vercel)
       const vercelDomain = null; // left null here; actual vercel domain comes from tenant_requests.vercel_assigned_domain
@@ -3328,7 +3328,8 @@ app.get('/api/admin/databases', async (c) => {
     const primaryName = process.env.TURSO_DB_NAME;
     const filtered = withTenant.filter(d => !primaryName || (d.name !== primaryName));
     // Join mapping table
-    const mappings = await gdb.select().from(branchesTable);
+    let mappings = [];
+    try { mappings = await gdb.select().from(branchesTable); } catch { mappings = []; }
     const mapByTenant = new Map((mappings || []).map(m => [Number(m.tenantId), m]));
     // Resolve owner and vercel domain by tenant_requests
     const tenantIds = Array.from(new Set(filtered.map(x => x.tenantId).filter(x => x !== null)));
@@ -3344,7 +3345,7 @@ app.get('/api/admin/databases', async (c) => {
       }
       const userIds = Array.from(new Set(tenantIds.map(tid => byId.get(Number(tid))).filter(Boolean)));
       let profilesRows = [];
-      if (userIds.length) profilesRows = await gdb.select().from(profiles);
+      if (userIds.length) profilesRows = await gdb.select().from(profiles).where(inArray(profiles.id, Array.from(userIds)));
       const pmap = new Map((profilesRows || []).map(p => [p.id, { username: p.username, avatar_url: p.avatarUrl }]));
       for (const tid of tenantIds) {
         const uid = byId.get(Number(tid));
@@ -5151,8 +5152,15 @@ app.get('/api/admin/tenants/:id/connectivity', async (c) => {
   // SSRF guard for both domains
   const check = async (d) => {
     if (!d) return null;
+    // allow wildcard subdomain like *.example.com? We still require standard FQDN when probing.
     if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(d)) throw new Error('invalid-domain');
-    const results = await dns.lookup(d, { all: true });
+    let results;
+    try {
+      results = await dns.lookup(d, { all: true });
+    } catch (e) {
+      // If DNS lookup fails, mark as no-dns but continue to try HTTP probe (may rely on external DNS).
+      return d;
+    }
     for (const { address } of results) {
       if (address === '127.0.0.1' || address === '::1') throw new Error('private-ip');
       if (address.includes('.')) {
