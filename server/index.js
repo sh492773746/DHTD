@@ -435,6 +435,34 @@ app.get('/api/auth/debug-config', async (c) => {
   }
 });
 
+// Gated verify to print JOSE error & resolved userId (requires Authorization)
+app.get('/api/auth/debug-verify', async (c) => {
+  if (process.env.ENABLE_AUTH_DEBUG !== '1') return c.json({ ok: false }, 404);
+  const auth = c.req.header('authorization') || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  if (!token) return c.json({ ok: false, error: 'no-token' }, 400);
+  const out = { ok: false, userId: null, issuer: supabaseIssuer || null, jwksUrl: null };
+  try {
+    if (__JWKS_CFG && __JWKS_CFG.url) {
+      try {
+        const u = new URL(__JWKS_CFG.url);
+        if (u.searchParams.has('apikey')) u.searchParams.set('apikey', '[set]');
+        out.jwksUrl = u.toString();
+      } catch {}
+    }
+    if (SUPABASE_JWKS && supabaseIssuer) {
+      const { payload } = await jwtVerify(token, SUPABASE_JWKS, { issuer: supabaseIssuer });
+      out.ok = true; out.userId = payload?.sub || null;
+      return c.json(out);
+    }
+    out.error = 'no-jwks';
+    return c.json(out, 500);
+  } catch (e) {
+    out.error = String((e && e.message) || e);
+    return c.json(out, 401);
+  }
+});
+
 app.post('/api/uploads/post-images', async (c) => {
   try {
     const userId = c.get('userId');
