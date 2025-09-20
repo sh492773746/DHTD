@@ -358,6 +358,7 @@ app.use('/api/admin/*', async (c, next) => {
 });
 
 app.get('/health', (c) => c.json({ ok: true }));
+app.get('/api/health', (c) => c.json({ ok: true }));
 
 app.get('/api/auth/debug', (c) => {
   if (process.env.NODE_ENV === 'production') return c.json({ ok: false }, 404);
