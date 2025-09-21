@@ -5220,7 +5220,7 @@ app.post('/api/tenants/:id/seed-page-content', async (c) => {
   }
 });
 
-// Tenant info by id (super-admin or that tenant's admin)
+// Tenant info by id (super-admin or tenant-admin of that tenant)
 app.get('/api/tenants/:id', async (c) => {
   try {
     const auth = requireAdmin(c);
