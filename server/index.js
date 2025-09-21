@@ -5219,3 +5219,31 @@ app.post('/api/tenants/:id/seed-page-content', async (c) => {
     return c.json({ error: 'failed' }, 500);
   }
 });
+
+// Tenant info by id (super-admin or that tenant's admin)
+app.get('/api/tenants/:id', async (c) => {
+  try {
+    const auth = requireAdmin(c);
+    if (!auth.ok) return c.json({ error: 'unauthorized' }, 401);
+    const id = Number(c.req.param('id'));
+    if (!id) return c.json({ error: 'invalid' }, 400);
+    const allowed = await canManageTenant(auth.userId, id);
+    if (!allowed) {
+      const isAdmin = await isSuperAdminUser(auth.userId);
+      if (!isAdmin) return c.json({ error: 'forbidden' }, 403);
+    }
+    const gdb = getGlobalDb(); await ensureTenantRequestsSchemaRaw(getGlobalClient());
+    const row = (await gdb.select().from(tenantRequestsTable).where(eq(tenantRequestsTable.id, id)).limit(1))?.[0] || null;
+    if (!row) return c.json({ error: 'not-found' }, 404);
+    return c.json({
+      id,
+      desired_domain: row.desiredDomain || row.desired_domain || null,
+      fallback_domain: row.fallbackDomain || row.fallback_domain || null,
+      vercel_assigned_domain: row.vercelAssignedDomain || row.vercel_assigned_domain || null,
+      status: row.status || 'pending',
+      created_at: row.createdAt || row.created_at || null,
+    });
+  } catch (e) {
+    return c.json({ error: 'failed' }, 500);
+  }
+});
