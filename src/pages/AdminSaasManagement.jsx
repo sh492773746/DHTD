@@ -171,8 +171,9 @@ const AdminSaasManagement = () => {
       if (res?.ok) {
         toast({ title: '校验成功', description: '域名解析已生效。' });
       } else {
-        const msg = res?.data?.code || res?.data?.error || res?.error || `status ${res?.status}`;
-        toast({ variant: 'destructive', title: '校验失败', description: String(msg) });
+        const raw = res?.error ?? res?.data?.error ?? res?.data?.code ?? res?.status;
+        const msg = (typeof raw === 'string') ? raw : JSON.stringify(raw);
+        toast({ variant: 'destructive', title: '校验失败', description: msg });
       }
     } catch (e) {
       toast({ variant: 'destructive', title: '校验失败', description: e.message });
