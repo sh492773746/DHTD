@@ -178,11 +178,18 @@ const CreatePost = ({ isOpen, setIsOpen, onPostCreated, tenantId }) => {
             // 1) upload images via resumable BFF
             const imageUrls = await uploadImagesViaBff();
 
-            // 2) create post via BFF
-            const res = await fetch('/api/posts', {
+            // 2) choose endpoint by forum mode
+            const mode = String(siteSettings?.social_forum_mode || '').toLowerCase();
+            const isShared = mode === 'shared';
+            const endpoint = isShared ? '/api/shared/posts' : '/api/posts';
+            const body = isShared
+              ? { content: content.trim(), images: imageUrls }
+              : { content: content.trim(), images: imageUrls, isAd, useFreePost };
+
+            const res = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
-                body: JSON.stringify({ content: content.trim(), images: imageUrls, isAd, useFreePost }),
+                body: JSON.stringify(body),
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
