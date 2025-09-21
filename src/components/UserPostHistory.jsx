@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import WeChatPostCard from '@/components/WeChatPostCard';
 import { Skeleton } from '@/components/ui/skeleton';
 import { motion } from 'framer-motion';
+import { useAuth } from '@/contexts/SupabaseAuthContext';
 
 const mapPost = (p) => ({
   id: p.id,
@@ -23,12 +24,16 @@ const mapPost = (p) => ({
   comments: [],
 });
 
-const fetchUserPosts = async (userId, isAd) => {
+const fetchUserPosts = async (userId, isAd, mode) => {
   if (!userId) return [];
-  const res = await fetch(`/api/posts?authorId=${encodeURIComponent(userId)}&page=0&size=50${isAd ? '&tab=ads' : '&tab=social'}`);
+  const shared = String(mode || '').toLowerCase() === 'shared';
+  const url = shared
+    ? `/api/shared/posts?authorId=${encodeURIComponent(userId)}&page=0&size=50`
+    : `/api/posts?authorId=${encodeURIComponent(userId)}&page=0&size=50${isAd ? '&tab=ads' : '&tab=social'}&source=tenant`;
+  const res = await fetch(url);
   if (!res.ok) throw new Error('Failed to load user posts');
   const data = await res.json();
-  return (data || []).map(mapPost).filter(p => !!p); // defensive
+  return (data || []).map(mapPost).filter(p => !!p);
 };
 
 const PostSkeleton = () => (
@@ -50,14 +55,16 @@ const PostSkeleton = () => (
 const UserPostHistory = ({ userId }) => {
   const [tab, setTab] = React.useState('social');
   const isAd = tab === 'ads';
+  const { siteSettings } = useAuth();
+  const mode = siteSettings?.social_forum_mode;
 
   const { data: posts, isLoading, isError, error } = useQuery({
-    queryKey: ['userPosts', userId, tab],
-    queryFn: () => fetchUserPosts(userId, isAd),
+    queryKey: ['userPosts', userId, tab, mode],
+    queryFn: () => fetchUserPosts(userId, isAd, mode),
     enabled: !!userId,
   });
 
-    return (
+  return (
     <div className="mt-6">
       <div className="sticky top-16 bg-background/80 backdrop-blur-sm z-10 p-2 rounded-b-lg">
         <div className="flex bg-muted p-1 rounded-full">
@@ -68,34 +75,34 @@ const UserPostHistory = ({ userId }) => {
 
       {isLoading && (
         <div className="space-y-4 mt-4">
-        <PostSkeleton />
-        <PostSkeleton />
-      </div>
+          <PostSkeleton />
+          <PostSkeleton />
+        </div>
       )}
 
       {isError && (
         <div className="text-center py-12 text-red-500 mt-4">
-        <p>加载动态失败: {error.message}</p>
-      </div>
+          <p>加载动态失败: {error.message}</p>
+        </div>
       )}
 
       {!isLoading && !isError && (!posts || posts.length === 0) && (
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
           className="text-center py-12 bg-gray-50 rounded-lg mt-4"
-      >
-        <div className="text-5xl mb-4">🤷‍♂️</div>
+        >
+          <div className="text-5xl mb-4">🤷‍♂️</div>
           <h3 className="text-lg font-semibold text-gray-700 mb-1">{tab === 'social' ? '朋友圈空空如也' : '白菜区暂无内容'}</h3>
           <p className="text-sm text-gray-500">该用户还没有发布过任何{tab === 'social' ? '朋友圈内容' : '白菜内容'}。</p>
-      </motion.div>
+        </motion.div>
       )}
 
       {!isLoading && !isError && posts && posts.length > 0 && (
         <div className="space-y-4 mt-4">
-      {posts.map(post => (
-        <WeChatPostCard key={post.id} post={post} onPostUpdated={() => {}} onDeletePost={() => {}} />
-      ))}
+          {posts.map(post => (
+            <WeChatPostCard key={post.id} post={post} onPostUpdated={() => {}} onDeletePost={() => {}} />
+          ))}
         </div>
       )}
     </div>
