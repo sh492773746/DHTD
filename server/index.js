@@ -3515,6 +3515,7 @@ app.get('/api/admin/databases', async (c) => {
       }
       const userIds = Array.from(new Set(tenantIds.map(tid => byId.get(Number(tid))).filter(Boolean)));
 
+
       let profilesRows = [];
       if (userIds.length) profilesRows = await gdb.select().from(profiles).where(inArray(profiles.id, Array.from(userIds)));
       const pmap = new Map((profilesRows || []).map(p => [p.id, { username: p.username, avatar_url: p.avatarUrl }]));
@@ -5127,7 +5128,8 @@ app.post('/api/admin/tenants/:id/domain/verify', async (c) => {
     const resp = await fetchWithTimeout(url, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
     const data = await resp.json().catch(() => ({}));
     const records = Array.isArray(data?.verification) ? data.verification.map(v => ({ type: v.type, domain: v.domain, value: v.value })) : [];
-    return c.json({ ok: resp.ok, status: resp.status, data, verification: records });
+    const errMsg = resp.ok ? null : (data?.error?.message || data?.error || data?.message || data?.code || `status ${resp.status}`);
+    return c.json({ ok: resp.ok, status: resp.status, data, verification: records, error: errMsg });
   } catch (e) {
     return c.json({ ok: false, error: e?.message || 'failed' }, 500);
   }
@@ -5168,44 +5170,52 @@ app.get('/api/admin/tenants/:id/connectivity', async (c) => {
   const vercelDomain = row ? (row.vercelAssignedDomain || row.vercel_assigned_domain || null) : null;
   // SSRF guard for both domains
   const check = async (d) => {
-    if (!d) return null;
-    // allow wildcard subdomain like *.example.com? We still require standard FQDN when probing.
-    if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(d)) throw new Error('invalid-domain');
-    let results;
+    if (!d) return { url: null, ok: false, status: 0 };
+    if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(d)) return { url: d, ok: false, status: 0, error: 'invalid-domain' };
+    const url = `https://${d}/api/health`;
     try {
-      results = await dns.lookup(d, { all: true });
+      const resp = await fetchWithTimeout(url);
+      return { url, ok: resp.ok, status: resp.status };
     } catch (e) {
-      // If DNS lookup fails, mark as no-dns but continue to try HTTP probe (may rely on external DNS).
-      return d;
+      return { url, ok: false, status: 0, error: String(e?.message || e) };
     }
-    for (const { address } of results) {
-      if (address === '127.0.0.1' || address === '::1') throw new Error('private-ip');
-      if (address.includes('.')) {
-        const oct = address.split('.').map(Number);
-        if (oct[0] === 10) throw new Error('private-ip');
-        if (oct[0] === 172 && oct[1] >= 16 && oct[1] <= 31) throw new Error('private-ip');
-        if (oct[0] === 192 && oct[1] === 168) throw new Error('private-ip');
-        if (oct[0] === 169 && oct[1] === 254) throw new Error('link-local');
-      }
-    }
-    return d;
-  };
-  try { await Promise.all([check(customDomain), check(vercelDomain)]); } catch (e) { return c.json({ ok: false, error: 'invalid-domain' }, 400); }
-  async function probe(url) {
-      if (!url) return { url: null, ok: false, status: 0 };
-      const controller = new AbortController();
-      const t = setTimeout(() => controller.abort(), 5000);
-      try {
-        const resp = await fetch(`https://${url}/api/health`, { signal: controller.signal });
-        clearTimeout(t);
-        return { url, ok: resp.ok, status: resp.status };
-      } catch (e) {
-        return { url, ok: false, status: 0, error: String(e?.message || e) };
-      }
-    }
-    const [p1, p2] = await Promise.all([probe(customDomain), probe(vercelDomain)]);
-    return c.json({ ok: true, custom: p1, vercel: p2 });
+  }
+  const [p1, p2] = await Promise.all([probe(customDomain), probe(vercelDomain)]);
+  return c.json({ ok: true, custom: p1, vercel: p2 });
   } catch (e) {
     return c.json({ ok: false, error: e?.message || 'failed' }, 500);
+  }
+});
+
+// Seed homepage page_content for a specific tenant (tenant-admin or super-admin)
+app.post('/api/tenants/:id/seed-page-content', async (c) => {
+  try {
+    const auth = requireAdmin(c);
+    if (!auth.ok) return c.json({ error: 'unauthorized' }, 401);
+    const id = Number(c.req.param('id'));
+    if (!id) return c.json({ error: 'invalid' }, 400);
+    const allowed = await canManageTenant(auth.userId, id);
+    if (!allowed) {
+      const isAdmin = await isSuperAdminUser(auth.userId);
+      if (!isAdmin) return c.json({ error: 'forbidden' }, 403);
+    }
+    const db = await getTursoClientForTenant(id);
+    try { await db.delete(pageContentTable).where(eq(pageContentTable.tenantId, id)); } catch {}
+    const inserts = [
+      { tenantId: id, page: 'home', section: 'carousel', position: 0, content: JSON.stringify({ title: '欢迎来到分站', description: '这里是您的专属首页', image_url: 'https://picsum.photos/seed/tenant-carousel/1200/400' }) },
+      { tenantId: id, page: 'home', section: 'announcements', position: 0, content: JSON.stringify({ text: '🎉 分站已开通，开始自定义您的站点吧！' }) },
+      { tenantId: id, page: 'home', section: 'feature_cards', position: 0, content: JSON.stringify({ title: '朋友圈', description: '分享日常，互动点赞', path: '/social', icon: 'MessageSquare' }) },
+      { tenantId: id, page: 'home', section: 'feature_cards', position: 1, content: JSON.stringify({ title: '游戏中心', description: '精选小游戏合集', path: '/games', icon: 'Gamepad2' }) },
+      { tenantId: id, page: 'home', section: 'feature_cards', position: 2, content: JSON.stringify({ title: '站点设置', description: '自定义站点内容', path: '/tenant-admin/page-content', icon: 'Settings' }) },
+      { tenantId: id, page: 'home', section: 'hot_games', position: 0, content: JSON.stringify({ title: '演示游戏A', description: '有趣又好玩', path: '/games', iconUrl: 'https://picsum.photos/seed/tenant-game1/200/200' }) },
+      { tenantId: id, page: 'home', section: 'hot_games', position: 1, content: JSON.stringify({ title: '演示游戏B', description: '简单轻松', path: '/games', iconUrl: 'https://picsum.photos/seed/tenant-game2/200/200' }) },
+      { tenantId: id, page: 'games', section: 'game_categories', position: 0, content: JSON.stringify({ name: '热门', slug: 'hot', icon: 'Flame' }) },
+      { tenantId: id, page: 'games', section: 'game_cards', position: 0, content: JSON.stringify({ title: '演示游戏A', category_slug: 'hot', description: '快来试试！', path: '/games', iconUrl: 'https://picsum.photos/seed/tenant-game1/200/200', isOfficial: true }) },
+      { tenantId: id, page: 'games', section: 'game_cards', position: 1, content: JSON.stringify({ title: '演示游戏B', category_slug: 'hot', description: '轻松上手', path: '/games', iconUrl: 'https://picsum.photos/seed/tenant-game2/200/200', isOfficial: false }) },
+    ];
+    for (const v of inserts) { try { await db.insert(pageContentTable).values(v); } catch {} }
+    return c.json({ ok: true, count: inserts.length });
+  } catch (e) {
+    return c.json({ error: 'failed' }, 500);
   }
 });
