@@ -174,10 +174,8 @@ function __isGetLimited(c, limit = 30, windowMs = 10_000) {
   __getRate.set(key, bucket);
   return bucket.count > limit;
 }
-app.use('/api/umami/*', async (c, next) => {
-  if ((c.req.method || 'GET').toUpperCase() === 'GET' && __isGetLimited(c)) return c.json({ error: 'too-many-requests' }, 429);
-  await next();
-});
+
+app.use('/api/umami/*', (c) => c.json({ error: 'gone' }, 410));
 app.use('/api/notifications/*', async (c, next) => {
   if ((c.req.method || 'GET').toUpperCase() === 'GET' && __isGetLimited(c)) return c.json({ error: 'too-many-requests' }, 429);
   await next();
@@ -399,7 +397,7 @@ app.use('*', async (c, next) => {
         const id = await supabaseIntrospectUser(token);
         if (id) userId = id;
       }
-      if (!userId && (process.env.NODE_ENV !== 'production' || process.env.ALLOW_JWT_DECODE_FALLBACK === '1')) {
+      if (!userId && process.env.NODE_ENV !== 'production') {
         try {
           const payload = decodeJwt(token);
           if (!supabaseIssuer || !payload?.iss || String(payload.iss).startsWith(supabaseIssuer)) {
@@ -409,7 +407,7 @@ app.use('*', async (c, next) => {
       }
       if (userId) __setCachedUserIdForToken(token, userId);
     } catch {
-      if (process.env.NODE_ENV !== 'production' || process.env.ALLOW_JWT_DECODE_FALLBACK === '1') {
+      if (process.env.NODE_ENV !== 'production') {
         try {
           const payload = decodeJwt(token);
           if (!supabaseIssuer || !payload?.iss || String(payload.iss).startsWith(supabaseIssuer)) {
@@ -1563,9 +1561,7 @@ app.get('/api/plausible/stats', async (c) => {
 });
 
 // New: Umami stats proxy
-app.get('/api/umami/stats', async (c) => {
-  __setCache(c, 60);
-  try {
+
     const period = String(c.req.query('period') || '30d');
     const days = period === 'today' ? 1 : (period === '3d' ? 3 : (period === '7d' ? 7 : 30));
 

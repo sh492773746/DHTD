@@ -35,6 +35,8 @@
     "@tanstack/react-query": "^5.45.1",
     "@tanstack/react-query-devtools": "^5.45.1",
     "@tanstack/react-virtual": "^3.13.12",
+    "@vercel/analytics": "^1.5.0",
+    "@vercel/speed-insights": "^1.2.0",
     "chart.js": "^4.4.3",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
@@ -78,7 +80,7 @@
   },
   "overrides": {
     "glob": "^10.3.10",
-    "rimraf": "^5.0.5",  
+    "rimraf": "^5.0.5",
     "undici": "^6.19.8",
     "esbuild": "^0.24.2"
   }
