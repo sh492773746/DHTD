@@ -4385,10 +4385,13 @@ async function ensureDefaultSettings(db, tenantId = 0) {
 app.get('/api/admin/settings', async (c) => {
   try {
     const userId = c.get('userId'); if (!userId) return c.json([], 401);
-    const isAdmin = await isSuperAdminUser(userId);
-    if (!isAdmin) return c.json([], 403);
     const qTenantIdRaw = c.req.query('tenantId');
     const targetTenantId = qTenantIdRaw != null && qTenantIdRaw !== '' ? Number(qTenantIdRaw) : 0;
+    const isSuper = await isSuperAdminUser(userId);
+    if (!isSuper) {
+      const allowed = await canManageTenant(userId, targetTenantId);
+      if (!allowed) return c.json([], 403);
+    }
     const db = await getTursoClientForTenant(targetTenantId);
     if (targetTenantId === 0) {
     await ensureDefaultSettings(db, 0);
@@ -4404,12 +4407,17 @@ app.get('/api/admin/settings', async (c) => {
 app.post('/api/admin/settings', async (c) => {
   try {
     const userId = c.get('userId'); if (!userId) return c.json({ error: 'unauthorized' }, 401);
-    const isAdmin = await isSuperAdminUser(userId);
-    if (!isAdmin) return c.json({ error: 'forbidden' }, 403);
     const body = await c.req.json();
     const targetTenantId = Number(body?.tenantId ?? 0);
-    const updates = Array.isArray(body?.updates) ? body.updates : body; // support old shape: array
-    if (!Array.isArray(updates)) return c.json({ error: 'invalid' }, 400);
+    const isSuper = await isSuperAdminUser(userId);
+    if (!isSuper) {
+      const allowed = await canManageTenant(userId, targetTenantId);
+      if (!allowed || targetTenantId === 0) return c.json({ error: 'forbidden' }, 403);
+    }
+    const updatesRaw = Array.isArray(body?.updates) ? body.updates : body; // support old shape: array
+    if (!Array.isArray(updatesRaw)) return c.json({ error: 'invalid' }, 400);
+    const ALLOWED_KEYS = new Set(['site_name', 'site_logo']);
+    const updates = isSuper ? updatesRaw : updatesRaw.filter(u => ALLOWED_KEYS.has(String(u.key)));
     const db = await getTursoClientForTenant(targetTenantId);
     for (const u of updates) {
       const rec = {
@@ -4438,11 +4446,15 @@ app.post('/api/admin/settings', async (c) => {
 app.delete('/api/admin/settings/:key', async (c) => {
   try {
     const userId = c.get('userId'); if (!userId) return c.json({ error: 'unauthorized' }, 401);
-    const isAdmin = await isSuperAdminUser(userId);
-    if (!isAdmin) return c.json({ error: 'forbidden' }, 403);
     const key = c.req.param('key');
     const qTenantIdRaw = c.req.query('tenantId');
     const targetTenantId = qTenantIdRaw != null && qTenantIdRaw !== '' ? Number(qTenantIdRaw) : 0;
+    const isSuper = await isSuperAdminUser(userId);
+    if (!isSuper) {
+      const ALLOWED_KEYS = new Set(['site_name', 'site_logo']);
+      const allowed = await canManageTenant(userId, targetTenantId);
+      if (!allowed || targetTenantId === 0 || !ALLOWED_KEYS.has(String(key))) return c.json({ error: 'forbidden' }, 403);
+    }
     const db = await getTursoClientForTenant(targetTenantId);
     await db.delete(appSettings).where(and(eq(appSettings.tenantId, targetTenantId), eq(appSettings.key, key)));
     return c.json({ ok: true });

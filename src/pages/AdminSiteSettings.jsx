@@ -223,39 +223,41 @@ const AdminSiteSettings = () => {
                 tenantEditableKeys={tenantEditableKeys}
             />
 
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mt-6 flex flex-col md:flex-row gap-3 justify-between items-center">
-                <div className="text-sm text-muted-foreground">
-                    友情提示：共享模式会从共享论坛展示帖子；置顶广告为主站全局数据，分站自动展示。
-                </div>
-                <div className="flex gap-3">
-                    <Button
-                        variant="secondary"
-                        onClick={async () => {
-                            try {
-                                await bffJson('/api/admin/seed-shared', { token, method: 'POST' });
-                                toast({ title: '共享论坛演示已写入', description: '已写入示例帖子到共享论坛。' });
-                            } catch (e) {
-                                toast({ title: '写入失败', description: e.message, variant: 'destructive' });
-                            }
-                        }}
-                    >
-                        一键写入共享论坛演示
-                    </Button>
-                    <Button
-                        variant="outline"
-                        onClick={async () => {
-                            try {
-                                await bffJson('/api/admin/seed-homepage', { token, method: 'POST' });
-                                toast({ title: '主站置顶广告演示已写入', description: '已写入社交页置顶广告（主站）。' });
-                            } catch (e) {
-                                toast({ title: '写入失败', description: e.message, variant: 'destructive' });
-                            }
-                        }}
-                    >
-                        预置社交置顶广告（主站）
-                    </Button>
-                </div>
-            </motion.div>
+            {isSuperAdmin && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mt-6 flex flex-col md:flex-row gap-3 justify-between items-center">
+                  <div className="text-sm text-muted-foreground">
+                      友情提示：共享模式会从共享论坛展示帖子；置顶广告为主站全局数据，分站自动展示。
+                  </div>
+                  <div className="flex gap-3">
+                      <Button
+                          variant="secondary"
+                          onClick={async () => {
+                              try {
+                                  await bffJson('/api/admin/seed-shared', { token, method: 'POST' });
+                                  toast({ title: '共享论坛演示已写入', description: '已写入示例帖子到共享论坛。' });
+                              } catch (e) {
+                                  toast({ title: '写入失败', description: e.message, variant: 'destructive' });
+                              }
+                          }}
+                      >
+                          一键写入共享论坛演示
+                      </Button>
+                      <Button
+                          variant="outline"
+                          onClick={async () => {
+                              try {
+                                  await bffJson('/api/admin/seed-homepage', { token, method: 'POST' });
+                                  toast({ title: '主站置顶广告演示已写入', description: '已写入社交页置顶广告（主站）。' });
+                              } catch (e) {
+                                  toast({ title: '写入失败', description: e.message, variant: 'destructive' });
+                              }
+                          }}
+                      >
+                          预置社交置顶广告（主站）
+                      </Button>
+                  </div>
+              </motion.div>
+            )}
 
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mt-6 flex justify-end">
                 <Button onClick={handleSaveChanges} disabled={isSaving}>
