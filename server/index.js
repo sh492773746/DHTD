@@ -433,7 +433,9 @@ app.use('/api/admin/*', async (c, next) => {
     p === '/api/admin/tenant-admins' ||
     p === '/api/admin/bootstrap-super-admin' ||
     p === '/api/admin/tenant-requests/check-domain' ||
-    (p === '/api/admin/tenant-requests' && m === 'POST')
+    (p === '/api/admin/tenant-requests' && m === 'POST') ||
+    // allow tenant-admin managed page-content routes to pass; in-route will enforce canManageTenant
+    p.startsWith('/api/admin/page-content')
   ) {
     // for POST /tenant-requests require login but不要求超管
     if (p === '/api/admin/tenant-requests' && m === 'POST') {
@@ -2587,7 +2589,7 @@ app.post('/api/admin/tenant-requests/:id/approve', async (c) => {
       }
     } catch {}
 
-    // Grant tenant-admin role to the owner (single-tenant-only)
+    // Grant tenant-admin role to the owner (single-tenant-only) and seed demo data
     try {
       const ownerRow = await gdb.select().from(tenantRequestsTable).where(eq(tenantRequestsTable.id, id)).limit(1);
       const ownerId = ownerRow?.[0]?.userId || ownerRow?.[0]?.user_id || null;
@@ -2601,7 +2603,7 @@ app.post('/api/admin/tenant-requests/:id/approve', async (c) => {
         const has = (existing || []).some(r => Number(r.tenantId) === Number(id));
         if (!has) await gdb.insert(tenantAdminsTable).values({ tenantId: id, userId: ownerId });
 
-        // Seed demo data for this tenant (idempotent)
+        // Seed demo posts
         try {
           const tdb = await getTursoClientForTenant(id);
           let anyPost = [];
@@ -2649,6 +2651,24 @@ app.post('/api/admin/tenant-requests/:id/approve', async (c) => {
                 });
               } catch {}
             }
+          }
+        } catch {}
+
+        // Seed homepage page_content for this tenant (idempotent)
+        try {
+          const tdb = await getTursoClientForTenant(id);
+          const existingPc = await tdb.select().from(pageContentTable).where(and(eq(pageContentTable.page, 'home'), inArray(pageContentTable.section, ['carousel','announcements','feature_cards','hot_games']))).limit(1);
+          if (!existingPc || existingPc.length === 0) {
+            const inserts = [
+              { tenantId: id, page: 'home', section: 'carousel', position: 0, content: JSON.stringify({ title: '欢迎来到分站', description: '这里是您的专属首页', image_url: 'https://picsum.photos/seed/tenant-carousel/1200/400' }) },
+              { tenantId: id, page: 'home', section: 'announcements', position: 0, content: JSON.stringify({ text: '🎉 分站已开通，开始自定义您的站点吧！' }) },
+              { tenantId: id, page: 'home', section: 'feature_cards', position: 0, content: JSON.stringify({ title: '朋友圈', description: '分享日常，互动点赞', path: '/social', icon: 'MessageSquare' }) },
+              { tenantId: id, page: 'home', section: 'feature_cards', position: 1, content: JSON.stringify({ title: '游戏中心', description: '精选小游戏合集', path: '/games', icon: 'Gamepad2' }) },
+              { tenantId: id, page: 'home', section: 'feature_cards', position: 2, content: JSON.stringify({ title: '站点设置', description: '自定义站点内容', path: '/admin/page-content', icon: 'Settings' }) },
+              { tenantId: id, page: 'home', section: 'hot_games', position: 0, content: JSON.stringify({ title: '演示游戏A', description: '有趣又好玩', path: '/games', iconUrl: 'https://picsum.photos/seed/tenant-game1/200/200' }) },
+              { tenantId: id, page: 'home', section: 'hot_games', position: 1, content: JSON.stringify({ title: '演示游戏B', description: '简单轻松', path: '/games', iconUrl: 'https://picsum.photos/seed/tenant-game2/200/200' }) },
+            ];
+            for (const v of inserts) { await tdb.insert(pageContentTable).values(v); }
           }
         } catch {}
       }
@@ -4969,187 +4989,6 @@ app.get('/api/tenant/resolve', async (c) => {
     return c.json({ tenantId });
   } catch (e) {
     return c.json({ tenantId: 0 });
-  }
-});
-
-// Expose admin role helpers
-app.get('/api/admin/is-super-admin', async (c) => {
-  try {
-    if (__isGetLimited(c, 60, 10_000)) return c.json({ isSuperAdmin: false, error: 'too-many-requests' }, 429);
-    const userId = c.get('userId');
-    if (!userId) return c.json({ isSuperAdmin: false }, 401);
-    const ok = await isSuperAdminUser(userId);
-    return c.json({ isSuperAdmin: !!ok });
-  } catch {
-    return c.json({ isSuperAdmin: false }, 500);
-  }
-});
-
-app.get('/api/admin/tenant-admins', async (c) => {
-  try {
-    if (__isGetLimited(c, 60, 10_000)) return c.json([], 429);
-    const userId = c.get('userId');
-    if (!userId) return c.json([], 401);
-    const gdb = getGlobalDb();
-    await ensureTenantRequestsSchemaRaw(getGlobalClient());
-    const rows = await gdb.select().from(tenantAdminsTable).where(eq(tenantAdminsTable.userId, userId));
-    const tenants = await gdb.select().from(tenantRequestsTable);
-    const alive = new Set((tenants || []).filter(t => (t.status || 'active') !== 'deleted').map(t => Number(t.id)));
-    const filtered = (rows || []).map(r => Number(r.tenantId)).filter(tid => alive.has(Number(tid)));
-    return c.json(filtered);
-  } catch {
-    return c.json([]);
-  }
-});
-
-app.get('/api/admin/bootstrap-super-admin', async (c) => {
-  try {
-    const userId = c.get('userId'); if (!userId) return c.json({ ok: false, error: 'unauthorized' }, 401);
-    const db = getGlobalDb();
-    const exists = await db.select().from(adminUsersTable).where(eq(adminUsersTable.userId, userId)).limit(1);
-    if (exists && exists.length > 0) return c.json({ ok: true, updated: false });
-    await db.insert(adminUsersTable).values({ userId });
-    return c.json({ ok: true, updated: true, userId });
-  } catch (e) {
-    console.error('GET /api/admin/bootstrap-super-admin error', e);
-    return c.json({ ok: false }, 500);
-  }
-});
-
-app.post('/api/admin/tenants/:id/reject', async (c) => {
-  try {
-    const auth = requireAdmin(c);
-    if (!auth.ok) return c.json({ ok: false, error: auth.reason }, 401);
-    const isAdmin = await isSuperAdminUser(auth.userId);
-    if (!isAdmin) return c.json({ ok: false, error: 'forbidden' }, 403);
-    const id = Number(c.req.param('id'));
-    const body = await c.req.json().catch(() => ({}));
-    const reason = String(body?.rejectionReason || body?.reason || '').slice(0, 500);
-    const gdb = getGlobalDb();
-    await ensureTenantRequestsSchemaRaw(getGlobalClient());
-    await gdb.update(tenantRequestsTable).set({ status: 'rejected', rejectionReason: reason || null }).where(eq(tenantRequestsTable.id, id));
-    return c.json({ ok: true });
-  } catch (e) {
-    console.error('POST /api/admin/tenants/:id/reject error', e);
-    return c.json({ ok: false }, 500);
-  }
-});
-
-app.post('/api/admin/tenants/:id/delete', async (c) => {
-  try {
-    const auth = requireAdmin(c);
-    if (!auth.ok) return c.json({ ok: false, error: auth.reason }, 401);
-    const isAdmin = await isSuperAdminUser(auth.userId);
-    if (!isAdmin) return c.json({ ok: false, error: 'forbidden' }, 403);
-    const id = Number(c.req.param('id'));
-    const gdb = getGlobalDb();
-    await ensureTenantRequestsSchemaRaw(getGlobalClient());
-    // mark tenant as deleted to preserve audit, then revoke roles & mappings
-    try { await gdb.update(tenantRequestsTable).set({ status: 'deleted' }).where(eq(tenantRequestsTable.id, id)); } catch {}
-    try { await gdb.delete(tenantAdminsTable).where(eq(tenantAdminsTable.tenantId, id)); } catch {}
-    try { await gdb.delete(branchesTable).where(eq(branchesTable.tenantId, id)); } catch {}
-    return c.json({ ok: true });
-  } catch (e) {
-    console.error('POST /api/admin/tenants/:id/delete error', e);
-    return c.json({ ok: false }, 500);
-  }
-});
-
-// Single post (tenant) fetch by id
-app.get('/api/posts/:id', async (c) => {
-  try {
-    const defaultDb = await getTursoClientForTenant(0);
-    const host = c.get('host').split(':')[0];
-    const tenantId = await resolveTenantId(defaultDb, host);
-    const db = await getTursoClientForTenant(tenantId);
-    const id = Number(c.req.param('id'));
-    if (!id) return c.json({ error: 'invalid' }, 400);
-    let rows = await db.select().from(postsTable).where(eq(postsTable.id, id)).limit(1);
-    const r = rows?.[0];
-    if (!r) return c.json({ error: 'not-found' }, 404);
-    // author
-    const arows = await db.select().from(profiles).where(eq(profiles.id, r.authorId)).limit(1);
-    const author = arows?.[0] ? { id: arows[0].id, username: arows[0].username, avatar_url: arows[0].avatarUrl } : null;
-    // counts
-    let likesCount = 0, commentsCount = 0;
-    try {
-      const raw = await getLibsqlClientForTenantRaw(tenantId);
-      const lc = await raw.execute({ sql: `select count(1) as c from likes where post_id = ?`, args: [id] });
-      const cc = await raw.execute({ sql: `select count(1) as c from comments where post_id = ?`, args: [id] });
-      likesCount = Number(lc?.rows?.[0]?.c || lc?.rows?.[0]?.C || 0);
-      commentsCount = Number(cc?.rows?.[0]?.c || cc?.rows?.[0]?.C || 0);
-    } catch {}
-    // likedByMe
-    let likedByMe = false;
-    const userId = c.get('userId');
-    if (userId) {
-      try {
-        const lrows = await db.select({ pid: likesTable.postId }).from(likesTable).where(and(eq(likesTable.userId, userId), eq(likesTable.postId, id))).limit(1);
-        likedByMe = (lrows || []).length > 0;
-      } catch {}
-    }
-    return c.json({ ...r, author, likesCount, commentsCount, likedByMe });
-  } catch (e) {
-    console.error('GET /api/posts/:id error', e);
-    return c.json({ error: 'failed' }, 500);
-  }
-});
-
-// Single post (shared) fetch by id
-app.get('/api/shared/posts/:id', async (c) => {
-  try {
-    await ensureSharedForumSchema();
-    const db = getGlobalDb();
-    const id = Number(c.req.param('id'));
-    if (!id) return c.json({ error: 'invalid' }, 400);
-    const rows = await db.select().from(sharedPosts).where(eq(sharedPosts.id, id)).limit(1);
-    const r = rows?.[0];
-    if (!r) return c.json({ error: 'not-found' }, 404);
-    // author
-    let author = null;
-    try {
-      const arows = await db.select().from(sharedProfiles).where(eq(sharedProfiles.id, r.authorId)).limit(1);
-      author = arows?.[0] ? { id: arows[0].id, username: arows[0].username, avatar_url: arows[0].avatarUrl, uid: arows[0].uid } : null;
-    } catch {}
-    // counts & liked by me
-    let likesCount = 0, commentsCount = 0, likedByMe = false;
-    try {
-      const lc = await db.select({ c: sql`count(1)` }).from(sharedLikes).where(eq(sharedLikes.postId, id));
-      const cc = await db.select({ c: sql`count(1)` }).from(sharedComments).where(eq(sharedComments.postId, id));
-      likesCount = Number(lc?.[0]?.c || 0);
-      commentsCount = Number(cc?.[0]?.c || 0);
-      const userId = c.get('userId');
-      if (userId) {
-        const lrows = await db.select({ pid: sharedLikes.postId }).from(sharedLikes).where(and(eq(sharedLikes.userId, userId), eq(sharedLikes.postId, id))).limit(1);
-        likedByMe = (lrows || []).length > 0;
-      }
-    } catch {}
-    return c.json({ ...r, author, likesCount, commentsCount, likedByMe });
-  } catch (e) {
-    console.error('GET /api/shared/posts/:id error', e);
-    return c.json({ error: 'failed' }, 500);
-  }
-});
-
-app.get('/api/tenants/current', async (c) => {
-  try {
-    const defaultDb = await getTursoClientForTenant(0);
-    const fwd = c.req.header('x-forwarded-host');
-    const host = (fwd || c.get('host') || '').split(':')[0];
-    const tenantId = await resolveTenantId(defaultDb, host);
-    const gdb = getGlobalDb(); await ensureTenantRequestsSchemaRaw(getGlobalClient());
-    const rows = await gdb.select().from(tenantRequestsTable).where(eq(tenantRequestsTable.id, tenantId)).limit(1);
-    const r = rows?.[0] || null;
-    return c.json({
-      tenantId,
-      customDomain: r ? (r.desiredDomain || r.desired_domain || null) : null,
-      fallbackDomain: r ? (r.fallbackDomain || r.fallback_domain || null) : null,
-      vercelDomain: r ? (r.vercelAssignedDomain || r.vercel_assigned_domain || null) : null,
-      status: r ? (r.status || 'pending') : 'unknown',
-      host,
-    });
-  } catch (e) {
-    return c.json({ tenantId: 0, customDomain: null, vercelDomain: null });
   }
 });
 
