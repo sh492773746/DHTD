@@ -1084,7 +1084,7 @@ app.get('/api/profile', async (c) => {
 });
 
 app.get('/api/settings', async (c) => {
-  __setCache(c, 0);
+  __setCache(c, 60);
   try {
     const scope = c.req.query('scope') || 'merged';
     if (scope === 'main') {
@@ -1100,20 +1100,23 @@ app.get('/api/settings', async (c) => {
     const defaultDb = await getTursoClientForTenant(0);
     const host = c.get('host').split(':')[0];
     const tenantId = await resolveTenantId(defaultDb, host);
-    const db = await getTursoClientForTenant(tenantId);
-    // ensure tenant defaults exist so sub-sites do not appear empty
-    await ensureDefaultSettings(db, tenantId);
-    const rows = await db.select().from(appSettings).where(inArray(appSettings.tenantId, [tenantId, 0]));
+    const dbTenant = await getTursoClientForTenant(tenantId);
+    try { await ensureDefaultSettings(dbTenant, tenantId); } catch {}
+    const rowsTenant = await dbTenant.select().from(appSettings).where(eq(appSettings.tenantId, tenantId));
+    const rowsMain = await defaultDb.select().from(appSettings).where(eq(appSettings.tenantId, 0));
     const map = {};
-    const ownerByKey = {};
-    for (const r of rows || []) {
-      if (r.tenantId === 0 && map[r.key] !== undefined) continue;
-      map[r.key] = r.value;
-      ownerByKey[r.key] = r.tenantId;
-    }
-    // For sub-tenants, avoid inheriting main's site_favicon so front-end can fall back to site_logo
-    if (tenantId !== 0 && ownerByKey['site_favicon'] === 0) {
-      delete map['site_favicon'];
+    // start with main
+    for (const r of rowsMain || []) { map[r.key] = r.value; }
+    // overlay tenant
+    const tenantKeys = new Set();
+    for (const r of rowsTenant || []) { map[r.key] = r.value; tenantKeys.add(r.key); }
+    // strict tenant-only keys should never fall back to main
+    const STRICT_KEYS = new Set(['site_name','site_logo','logo_url','site_favicon','site_description']);
+    for (const k of STRICT_KEYS) {
+      if (!tenantKeys.has(k)) {
+        if (k === 'site_name' && tenantId !== 0) map[k] = `分站 #${tenantId}`;
+        else map[k] = '';
+      }
     }
     if (!map['social_forum_mode']) map['social_forum_mode'] = 'shared';
     return c.json(map);
