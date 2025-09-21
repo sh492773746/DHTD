@@ -4482,6 +4482,7 @@ app.get('/api/admin/tenants', async (c) => {
       .map(r => ({
         id: r.id,
         desired_domain: r.desiredDomain || r.desired_domain,
+        fallback_domain: r.fallbackDomain || r.fallback_domain || null,
         status: r.status || 'pending',
         created_at: r.createdAt || r.created_at || null,
         contact_wangwang: r.contactWangWang || r.contact_wangwang || null,
