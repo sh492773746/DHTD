@@ -5180,7 +5180,7 @@ app.get('/api/admin/tenants/:id/connectivity', async (c) => {
       return { url, ok: false, status: 0, error: String(e?.message || e) };
     }
   }
-  const [p1, p2] = await Promise.all([probe(customDomain), probe(vercelDomain)]);
+  const [p1, p2] = await Promise.all([check(customDomain), check(vercelDomain)]);
   return c.json({ ok: true, custom: p1, vercel: p2 });
   } catch (e) {
     return c.json({ ok: false, error: e?.message || 'failed' }, 500);
