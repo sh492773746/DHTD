@@ -13,7 +13,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from '@/components/ui/skeleton';
 
-const UmamiOverviewCard = lazy(() => import('@/components/PlausibleStats'));
+// Umami overview removed; using Vercel Analytics globally
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, LineController, Title, Tooltip, Legend);
 
@@ -146,9 +146,7 @@ const AdminDashboard = () => {
           <StatCard title="总发帖数" value={isLoading ? '...' : data?.totalPosts?.toLocaleString() || '0'} icon={FileText} loading={isLoading} />
         </div>
 
-        <Suspense fallback={<Skeleton className="w-full h-[120px]" />}>
-          <UmamiOverviewCard period={period} />
-        </Suspense>
+        {/* Removed UmamiOverviewCard; analytics via Vercel Analytics */}
 
         <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-7">
           <Card className="lg:col-span-4">
