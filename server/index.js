@@ -1101,11 +1101,19 @@ app.get('/api/settings', async (c) => {
     const host = c.get('host').split(':')[0];
     const tenantId = await resolveTenantId(defaultDb, host);
     const db = await getTursoClientForTenant(tenantId);
+    // ensure tenant defaults exist so sub-sites do not appear empty
+    await ensureDefaultSettings(db, tenantId);
     const rows = await db.select().from(appSettings).where(inArray(appSettings.tenantId, [tenantId, 0]));
     const map = {};
+    const ownerByKey = {};
     for (const r of rows || []) {
       if (r.tenantId === 0 && map[r.key] !== undefined) continue;
       map[r.key] = r.value;
+      ownerByKey[r.key] = r.tenantId;
+    }
+    // For sub-tenants, avoid inheriting main's site_favicon so front-end can fall back to site_logo
+    if (tenantId !== 0 && ownerByKey['site_favicon'] === 0) {
+      delete map['site_favicon'];
     }
     if (!map['social_forum_mode']) map['social_forum_mode'] = 'shared';
     return c.json(map);
