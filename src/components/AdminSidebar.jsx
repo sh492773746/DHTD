@@ -61,7 +61,7 @@ const AdminSidebar = ({ onLinkClick, className }) => {
                 <Button variant="outline" className="w-full justify-between">
                   <div className="flex items-center gap-2 overflow-hidden">
                     <Avatar className="h-6 w-6">
-                        <AvatarImage src={siteSettings.logo_url} />
+                        <AvatarImage src={siteSettings.site_logo || siteSettings.logo_url} />
                         <AvatarFallback>{siteSettings.site_name?.[0] || 'D'}</AvatarFallback>
                     </Avatar>
                     <span className="font-semibold text-sm truncate">{siteSettings.site_name || '大海团队'}</span>

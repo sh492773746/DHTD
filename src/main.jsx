@@ -30,7 +30,7 @@ const queryClient = new QueryClient({
 function FaviconUpdater() {
   const { siteSettings } = useAuth();
   React.useEffect(() => {
-    const href = siteSettings?.site_favicon || siteSettings?.logo_url || siteSettings?.site_logo || null;
+    const href = siteSettings?.site_favicon || siteSettings?.site_logo || siteSettings?.logo_url || null;
     if (!href) return;
     let link = document.querySelector("link[rel='icon']");
     if (!link) {
@@ -40,7 +40,7 @@ function FaviconUpdater() {
     }
     link.type = 'image/png';
     link.href = href;
-  }, [siteSettings?.site_favicon, siteSettings?.logo_url, siteSettings?.site_logo]);
+  }, [siteSettings?.site_favicon, siteSettings?.site_logo, siteSettings?.logo_url]);
   return null;
 }
 
