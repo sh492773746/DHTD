@@ -2827,11 +2827,12 @@ app.get('/api/admin/page-content', async (c) => {
     const pageDef = pageConfig?.[page];
     const secDef = pageDef?.sections?.find(s => s.id === section);
     const forceGlobal = !!secDef?.globalOnly;
-    const db = await getTursoClientForTenant(forceGlobal ? 0 : tenantId);
+    const targetTenantId = forceGlobal ? 0 : tenantId;
+    const db = await getTursoClientForTenant(targetTenantId);
     const rows = await db
       .select()
       .from(pageContentTable)
-      .where(and(eq(pageContentTable.page, page), eq(pageContentTable.section, section), inArray(pageContentTable.tenantId, forceGlobal ? [0] : [tenantId, 0])))
+      .where(and(eq(pageContentTable.page, page), eq(pageContentTable.section, section), eq(pageContentTable.tenantId, targetTenantId)))
       .orderBy(pageContentTable.position);
     return c.json(rows || []);
   } catch (e) {
