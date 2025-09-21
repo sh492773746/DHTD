@@ -458,6 +458,50 @@ app.use('/api/admin/*', async (c, next) => {
 app.get('/health', (c) => c.json({ ok: true }));
 app.get('/api/health', (c) => c.json({ ok: true }));
 
+// Admin role helper endpoints (used by frontend to show admin entries)
+app.get('/api/admin/is-super-admin', async (c) => {
+  try {
+    if (__isGetLimited(c, 60, 10_000)) return c.json({ isSuperAdmin: false, error: 'too-many-requests' }, 429);
+    const userId = c.get('userId');
+    if (!userId) return c.json({ isSuperAdmin: false }, 401);
+    const ok = await isSuperAdminUser(userId);
+    return c.json({ isSuperAdmin: !!ok });
+  } catch {
+    return c.json({ isSuperAdmin: false }, 500);
+  }
+});
+
+app.get('/api/admin/tenant-admins', async (c) => {
+  try {
+    if (__isGetLimited(c, 60, 10_000)) return c.json([], 429);
+    const userId = c.get('userId');
+    if (!userId) return c.json([], 401);
+    const gdb = getGlobalDb();
+    await ensureTenantRequestsSchemaRaw(getGlobalClient());
+    const rows = await gdb.select().from(tenantAdminsTable).where(eq(tenantAdminsTable.userId, userId));
+    const tenants = await gdb.select().from(tenantRequestsTable);
+    const alive = new Set((tenants || []).filter(t => (t.status || 'active') !== 'deleted').map(t => Number(t.id)));
+    const filtered = (rows || []).map(r => Number(r.tenantId)).filter(tid => alive.has(Number(tid)));
+    return c.json(filtered);
+  } catch {
+    return c.json([]);
+  }
+});
+
+app.get('/api/admin/bootstrap-super-admin', async (c) => {
+  try {
+    const userId = c.get('userId'); if (!userId) return c.json({ ok: false, error: 'unauthorized' }, 401);
+    const db = getGlobalDb();
+    const exists = await db.select().from(adminUsersTable).where(eq(adminUsersTable.userId, userId)).limit(1);
+    if (exists && exists.length > 0) return c.json({ ok: true, updated: false });
+    await db.insert(adminUsersTable).values({ userId });
+    return c.json({ ok: true, updated: true, userId });
+  } catch (e) {
+    console.error('GET /api/admin/bootstrap-super-admin error', e);
+    return c.json({ ok: false }, 500);
+  }
+});
+
 app.get('/api/auth/debug', (c) => {
   if (process.env.NODE_ENV === 'production') return c.json({ ok: false }, 404);
   return c.json({ userId: c.get('userId') || null });
