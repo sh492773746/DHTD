@@ -7,10 +7,38 @@ import { LayoutTemplate, Brush, Eye } from 'lucide-react';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { useNavigate } from 'react-router-dom';
 import TenantInfo from '@/components/TenantInfo';
+import { useToast } from '@/components/ui/use-toast';
+import { useState, useCallback } from 'react';
 
 const TenantDashboard = () => {
-    const { profile, siteSettings, tenantId } = useAuth();
+    const { profile, siteSettings, tenantId, session } = useAuth();
     const navigate = useNavigate();
+    const { toast } = useToast();
+    const [resetting, setResetting] = useState(false);
+
+    const handleResetDemo = useCallback(async () => {
+        if (!tenantId) {
+            toast({ title: '无法重置', description: '未识别到当前租户ID', variant: 'destructive' });
+            return;
+        }
+        setResetting(true);
+        try {
+            const res = await fetch(`/api/tenants/${tenantId}/seed-page-content`, {
+                method: 'POST',
+                headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+            });
+            const ct = res.headers.get('content-type') || '';
+            const data = ct.includes('application/json') ? await res.json() : await res.text();
+            if (!res.ok || data?.ok === false) {
+                throw new Error(data?.error || `HTTP ${res.status}`);
+            }
+            toast({ title: '演示内容已重置', description: '首页与游戏中心演示内容写入成功。' });
+        } catch (e) {
+            toast({ title: '重置失败', description: e.message || '未知错误', variant: 'destructive' });
+        } finally {
+            setResetting(false);
+        }
+    }, [tenantId, session, toast]);
     
     return (
         <>
@@ -44,6 +72,9 @@ const TenantDashboard = () => {
                                         <span>预览我的站点</span>
                                         <Eye className="h-5 w-5" />
                                     </Button>
+                                     <Button className="w-full" variant="destructive" disabled={resetting} onClick={handleResetDemo}>
+                                         {resetting ? '重置中…' : '重置演示内容（首页+游戏中心）'}
+                                     </Button>
                                 </CardContent>
                             </Card>
                         </motion.div>
