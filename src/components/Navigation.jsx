@@ -121,11 +121,10 @@ const Navigation = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-14">
           <Link to="/" className="flex items-center text-2xl font-bold text-foreground">
-            {siteSettings.logo_url ? (
-              <img src={siteSettings.logo_url} alt={siteSettings.site_name || 'Site Logo'} className="h-8 max-w-[150px] object-contain" />
-            ) : (
-              siteSettings.site_name || '大海'
+            {siteSettings.logo_url && (
+              <img src={siteSettings.logo_url} alt={siteSettings.site_name || 'Site Logo'} className="h-8 w-auto object-contain mr-2" />
             )}
+            <span>{siteSettings.site_name || '大海'}</span>
           </Link>
 
           <nav className="hidden md:flex items-center space-x-6">
