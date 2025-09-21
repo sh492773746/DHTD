@@ -8,37 +8,28 @@ import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { useNavigate } from 'react-router-dom';
 import TenantInfo from '@/components/TenantInfo';
 import { useToast } from '@/components/ui/use-toast';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
 const TenantDashboard = () => {
     const { profile, siteSettings, tenantId, session } = useAuth();
     const navigate = useNavigate();
     const { toast } = useToast();
-    const [resetting, setResetting] = useState(false);
-
-    const handleResetDemo = useCallback(async () => {
-        if (!tenantId) {
-            toast({ title: '无法重置', description: '未识别到当前租户ID', variant: 'destructive' });
-            return;
-        }
-        setResetting(true);
-        try {
-            const res = await fetch(`/api/tenants/${tenantId}/seed-page-content`, {
-                method: 'POST',
-                headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
-            });
-            const ct = res.headers.get('content-type') || '';
-            const data = ct.includes('application/json') ? await res.json() : await res.text();
-            if (!res.ok || data?.ok === false) {
-                throw new Error(data?.error || `HTTP ${res.status}`);
-            }
-            toast({ title: '演示内容已重置', description: '首页与游戏中心演示内容写入成功。' });
-        } catch (e) {
-            toast({ title: '重置失败', description: e.message || '未知错误', variant: 'destructive' });
-        } finally {
-            setResetting(false);
-        }
-    }, [tenantId, session, toast]);
+    const [tenantInfo, setTenantInfo] = useState(null);
+    useEffect(() => {
+        const load = async () => {
+            if (!tenantId) return;
+            try {
+                const res = await fetch(`/api/tenants/${tenantId}`, { headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {} });
+                if (!res.ok) return;
+                const j = await res.json();
+                setTenantInfo(j || null);
+            } catch {}
+        };
+        load();
+    }, [tenantId, session]);
+    const getPreviewDomain = () => {
+        return tenantInfo?.fallback_domain || tenantInfo?.vercel_assigned_domain || tenantInfo?.desired_domain || null;
+    };
     
     return (
         <>
@@ -68,13 +59,14 @@ const TenantDashboard = () => {
                                         <span>编辑站点设置</span>
                                         <Brush className="h-5 w-5" />
                                     </Button>
-                                     <Button className="w-full justify-between" size="lg" variant="secondary" onClick={() => window.open(`/tenant/${tenantId}/home`, '_blank')}>
+                                     <Button className="w-full justify-between" size="lg" variant="secondary" onClick={() => {
+                                        const d = getPreviewDomain();
+                                        if (d) window.open(`https://${d}`, '_blank');
+                                        else window.open(`/tenant/${tenantId}/home`, '_blank');
+                                     }}>
                                         <span>预览我的站点</span>
                                         <Eye className="h-5 w-5" />
                                     </Button>
-                                     <Button className="w-full" variant="destructive" disabled={resetting} onClick={handleResetDemo}>
-                                         {resetting ? '重置中…' : '重置演示内容（首页+游戏中心）'}
-                                     </Button>
                                 </CardContent>
                             </Card>
                         </motion.div>
