@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, ExternalLink, Edit, CheckCircle, XCircle, Trash2, Eye } from 'lucide-react';
+import { MoreHorizontal, ExternalLink, Edit, CheckCircle, XCircle, Trash2, Eye, RefreshCw } from 'lucide-react';
 import StatusBadge from '@/components/admin/saas/StatusBadge';
 import {
     DropdownMenu,
@@ -26,6 +26,36 @@ const RequestTable = ({ requests, isSubmitting, onApprove, onReject, onDelete, o
 
   const handleManageContent = (tenantId) => {
     navigate(`/admin/saas/content/${tenantId}`);
+  };
+
+  const getToken = () => {
+    try {
+      for (const s of [localStorage, sessionStorage]) {
+        for (let i = 0; i < s.length; i++) {
+          const k = s.key(i);
+          if (/^sb-.*-auth-token$/i.test(k)) {
+            const v = JSON.parse(s.getItem(k));
+            return v?.currentSession?.access_token || v?.access_token || v?.accessToken || null;
+          }
+        }
+      }
+    } catch {}
+    return null;
+  };
+
+  const handleResetDemo = async (tenantId) => {
+    const t = getToken();
+    if (!t) return alert('未获取到登录凭据');
+    try {
+      const res = await fetch(`/api/tenants/${tenantId}/seed-page-content`, { method: 'POST', headers: { Authorization: `Bearer ${t}` } });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(text || `HTTP ${res.status}`);
+      }
+      alert('演示内容已重置');
+    } catch (e) {
+      alert(`重置失败: ${e.message}`);
+    }
   };
 
   return (
@@ -110,6 +140,10 @@ const RequestTable = ({ requests, isSubmitting, onApprove, onReject, onDelete, o
                         <DropdownMenuItem onClick={() => navigate(`/admin/page-content/${request.id}`)}>
                           <Edit className="mr-2 h-4 w-4" />
                           管理内容
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleResetDemo(request.id)}>
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                          重置演示内容
                         </DropdownMenuItem>
                         {onBindDomain && (
                           <DropdownMenuItem onClick={() => onBindDomain(request)}>

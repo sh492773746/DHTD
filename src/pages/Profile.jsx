@@ -236,7 +236,7 @@ const Profile = () => {
                     <ShieldCheck className="w-4 h-4 mr-2" />进入超级后台
                   </Button>
                 )}
-                {showTenantAdminButton && (
+                {showTenantAdminButton && !isSuperAdmin && (
                   <Button onClick={() => navigate('/tenant-admin')} className="w-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white">
                     <UserCog className="w-4 h-4 mr-2" />进入分站后台
                   </Button>
