@@ -65,7 +65,7 @@ export const pageConfig = {
   social: {
     name: '朋友圈',
     sections: [
-       { id: 'pinned_ads', name: '置顶广告', tenantEditable: false, fields: [
+       { id: 'pinned_ads', name: '置顶广告', tenantEditable: false, globalOnly: true, fields: [
         { id: 'title', label: '广告标题', type: 'text' },
         { id: 'description', label: '广告描述', type: 'text' },
         { id: 'link_url', label: '跳转链接', type: 'text' },
