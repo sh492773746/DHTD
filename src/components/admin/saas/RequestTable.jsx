@@ -36,7 +36,7 @@ const RequestTable = ({ requests, isSubmitting, onApprove, onReject, onDelete, o
             <TableHead className="whitespace-nowrap">用户</TableHead>
             <TableHead className="whitespace-nowrap">旺旺联系</TableHead>
             <TableHead className="whitespace-nowrap">自定义域名</TableHead>
-            <TableHead className="whitespace-nowrap">Vercel域名</TableHead>
+            <TableHead className="whitespace-nowrap">兜底域名</TableHead>
             <TableHead className="whitespace-nowrap">申请时间</TableHead>
             <TableHead className="whitespace-nowrap">状态</TableHead>
             <TableHead className="text-right whitespace-nowrap">操作</TableHead>
@@ -66,14 +66,14 @@ const RequestTable = ({ requests, isSubmitting, onApprove, onReject, onDelete, o
                 </a>
               </TableCell>
               <TableCell>
-                {request.vercel_assigned_domain || request.fallback_domain ? (
+                {request.fallback_domain || request.vercel_assigned_domain ? (
                   <a 
-                    href={`https://${request.vercel_assigned_domain || request.fallback_domain}`} 
+                    href={`https://${request.fallback_domain || request.vercel_assigned_domain}`} 
                     target="_blank" 
                     rel="noopener noreferrer" 
                     className="text-gray-500 hover:underline flex items-center gap-1"
                   >
-                    {(request.vercel_assigned_domain || request.fallback_domain)} <ExternalLink className="h-4 w-4" />
+                    {(request.fallback_domain || request.vercel_assigned_domain)} <ExternalLink className="h-4 w-4" />
                   </a>
                 ) : 'N/A'}
               </TableCell>
@@ -107,7 +107,7 @@ const RequestTable = ({ requests, isSubmitting, onApprove, onReject, onDelete, o
                     )}
                     {request.status === 'active' && (
                       <>
-                        <DropdownMenuItem onClick={() => handleManageContent(request.id)}>
+                        <DropdownMenuItem onClick={() => navigate(`/admin/page-content/${request.id}`)}>
                           <Edit className="mr-2 h-4 w-4" />
                           管理内容
                         </DropdownMenuItem>
