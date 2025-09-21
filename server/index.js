@@ -342,6 +342,7 @@ async function ensureIndexes() {
 }
 
 await ensureIndexes();
+try { await ensureTenantRequestsSchemaRaw(getGlobalClient()); } catch {}
 
 async function ensureBucketPublic(supabase, bucket) {
   try {
@@ -1099,23 +1100,15 @@ app.get('/api/page-content', async (c) => {
       return c.json(list);
     }
 
-    // 非全局：并行查询 分站 + 主站，然后以分站优先
+    // 非全局：严格租户模式，不回退主站
     const dbTenant = await getTursoClientForTenant(tenantId);
-    const [rowsTenant, rowsMain] = await Promise.all([
-      dbTenant
-        .select()
-        .from(pageContentTable)
-        .where(and(eq(pageContentTable.page, page), eq(pageContentTable.section, section), eq(pageContentTable.tenantId, tenantId)))
-        .orderBy(pageContentTable.position),
-      defaultDb
-        .select()
-        .from(pageContentTable)
-        .where(and(eq(pageContentTable.page, page), eq(pageContentTable.section, section), eq(pageContentTable.tenantId, 0)))
-        .orderBy(pageContentTable.position),
-    ]);
+    const rowsTenant = await dbTenant
+      .select()
+      .from(pageContentTable)
+      .where(and(eq(pageContentTable.page, page), eq(pageContentTable.section, section), eq(pageContentTable.tenantId, tenantId)))
+      .orderBy(pageContentTable.position);
 
-    const useRows = (rowsTenant && rowsTenant.length > 0) ? rowsTenant : (rowsMain || []);
-    const list = (useRows || []).map((r) => ({
+    const list = (rowsTenant || []).map((r) => ({
       id: r.id,
       position: r.position,
       ...(typeof r.content === 'string' ? JSON.parse(r.content || '{}') : r.content),
