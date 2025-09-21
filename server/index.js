@@ -3134,9 +3134,31 @@ app.post('/api/admin/tenants/:id/provision', async (c) => {
     await client.execute("insert into posts(tenant_id, author_id, content, images, is_ad, is_pinned, status, created_at, updated_at) values (?, ?, ?, ?, ?, ?, 'approved', ?, ?)", [
       tenantId, 'tenant-user-1', '欢迎来到分站（自动开通）', JSON.stringify([]), 0, 1, nowIso, nowIso
     ]);
-    await client.execute("insert into page_content(tenant_id, page, section, position, content) values (?, 'home', 'announcements', 0, ?)", [
-      tenantId, JSON.stringify({ text: '🎉 分站已开通，欢迎体验！' })
-    ]);
+    // 清空该分支的 page_content，避免主站遗留模板污染
+    try { await client.execute("delete from page_content"); } catch {}
+    // 插入首页与游戏中心演示数据（tenant-scoped）
+    const demoPageContent = [
+      // home
+      { page:'home', section:'carousel', position:0, content:{ title:'欢迎来到分站', description:'这里是您的专属首页', image_url:'https://picsum.photos/seed/tenant-carousel/1200/400' } },
+      { page:'home', section:'announcements', position:0, content:{ text:'🎉 分站已开通，开始自定义您的站点吧！' } },
+      { page:'home', section:'feature_cards', position:0, content:{ title:'朋友圈', description:'分享日常，互动点赞', path:'/social', icon:'MessageSquare' } },
+      { page:'home', section:'feature_cards', position:1, content:{ title:'游戏中心', description:'精选小游戏合集', path:'/games', icon:'Gamepad2' } },
+      { page:'home', section:'feature_cards', position:2, content:{ title:'站点设置', description:'自定义站点内容', path:'/tenant-admin/page-content', icon:'Settings' } },
+      { page:'home', section:'hot_games', position:0, content:{ title:'演示游戏A', description:'有趣又好玩', path:'/games', iconUrl:'https://picsum.photos/seed/tenant-game1/200/200' } },
+      { page:'home', section:'hot_games', position:1, content:{ title:'演示游戏B', description:'简单轻松', path:'/games', iconUrl:'https://picsum.photos/seed/tenant-game2/200/200' } },
+      // games
+      { page:'games', section:'game_categories', position:0, content:{ name:'热门', slug:'hot', icon:'Flame' } },
+      { page:'games', section:'game_cards', position:0, content:{ title:'演示游戏A', category_slug:'hot', description:'快来试试！', path:'/games', iconUrl:'https://picsum.photos/seed/tenant-game1/200/200', isOfficial:true } },
+      { page:'games', section:'game_cards', position:1, content:{ title:'演示游戏B', category_slug:'hot', description:'轻松上手', path:'/games', iconUrl:'https://picsum.photos/seed/tenant-game2/200/200', isOfficial:false } },
+    ];
+    for (const item of demoPageContent) {
+      try {
+        await client.execute(
+          "insert into page_content(tenant_id, page, section, position, content) values (?, ?, ?, ?, ?)",
+          [ tenantId, item.page, item.section, item.position, JSON.stringify(item.content) ]
+        );
+      } catch {}
+    }
     // 2.6) Seed tenant app_settings defaults (independent mode + site name)
     try {
       await ensureDefaultSettings(await getTursoClientForTenant(tenantId), tenantId);
@@ -3495,6 +3517,7 @@ app.get('/api/admin/databases', async (c) => {
         if (vd) vercelMap.set(Number(t.id), vd);
       }
       const userIds = Array.from(new Set(tenantIds.map(tid => byId.get(Number(tid))).filter(Boolean)));
+
       let profilesRows = [];
       if (userIds.length) profilesRows = await gdb.select().from(profiles).where(inArray(profiles.id, Array.from(userIds)));
       const pmap = new Map((profilesRows || []).map(p => [p.id, { username: p.username, avatar_url: p.avatarUrl }]));
