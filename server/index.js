@@ -4342,6 +4342,9 @@ app.post('/api/points/reward/invite', async (c) => {
 
 // ---------- Admin: App Settings ----------
 const defaultSettingsDefs = [
+  { key: 'site_name', value: '大海团队', name: '站点名称', description: '显示在站点各处的名称（分站可自定义）', type: 'text' },
+  { key: 'site_description', value: '', name: '站点描述', description: '用于 SEO 与页面描述（仅主站对全局生效，分站自用）', type: 'textarea' },
+  { key: 'site_logo', value: '', name: '站点 Logo', description: '顶部导航显示的 Logo（建议使用透明 PNG/JPG）', type: 'image' },
   { key: 'new_user_points', value: '100', name: '新用户初始积分', description: '新注册用户默认获得的积分数量', type: 'number' },
   { key: 'initial_virtual_currency', value: '0', name: '新用户初始虚拟分', description: '新注册用户默认获得的虚拟分数量', type: 'number' },
   { key: 'new_user_free_posts', value: '0', name: '新用户免费发布次数', description: '新注册用户可免费发布的次数', type: 'number' },
@@ -4393,9 +4396,8 @@ app.get('/api/admin/settings', async (c) => {
       if (!allowed) return c.json([], 403);
     }
     const db = await getTursoClientForTenant(targetTenantId);
-    if (targetTenantId === 0) {
-    await ensureDefaultSettings(db, 0);
-    }
+    // ensure defaults for the requested tenant (main or sub)
+    await ensureDefaultSettings(db, targetTenantId);
     const rows = await db.select().from(appSettings).where(eq(appSettings.tenantId, targetTenantId));
     return c.json(rows || []);
   } catch (e) {
