@@ -24,12 +24,9 @@ const mapPost = (p) => ({
   comments: [],
 });
 
-const fetchUserPosts = async (userId, isAd, mode) => {
+const fetchUserPosts = async (userId, isAd) => {
   if (!userId) return [];
-  const shared = String(mode || '').toLowerCase() === 'shared';
-  const url = shared
-    ? `/api/shared/posts?authorId=${encodeURIComponent(userId)}&page=0&size=50`
-    : `/api/posts?authorId=${encodeURIComponent(userId)}&page=0&size=50${isAd ? '&tab=ads' : '&tab=social'}&source=tenant`;
+  const url = `/api/shared/posts?authorId=${encodeURIComponent(userId)}&page=0&size=50`;
   const res = await fetch(url);
   if (!res.ok) throw new Error('Failed to load user posts');
   const data = await res.json();
@@ -56,11 +53,10 @@ const UserPostHistory = ({ userId }) => {
   const [tab, setTab] = React.useState('social');
   const isAd = tab === 'ads';
   const { siteSettings } = useAuth();
-  const mode = siteSettings?.social_forum_mode;
 
   const { data: posts, isLoading, isError, error } = useQuery({
-    queryKey: ['userPosts', userId, tab, mode],
-    queryFn: () => fetchUserPosts(userId, isAd, mode),
+    queryKey: ['userPosts', userId, tab],
+    queryFn: () => fetchUserPosts(userId, isAd),
     enabled: !!userId,
   });
 

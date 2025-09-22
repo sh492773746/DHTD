@@ -51,12 +51,7 @@ const SocialFeed = () => {
     const { data: pinnedAds, isLoading: isPinnedAdsLoading } = usePageContent('social', 'pinned_ads');
     
     const fetchPosts = async ({ pageParam = 0 }) => {
-        const sharedMode = String(siteSettings?.social_forum_mode || '').toLowerCase() === 'shared';
-        const base = sharedMode
-          ? `/api/shared/posts?page=${pageParam}&size=${POSTS_PER_PAGE}`
-          : `/api/posts?tab=${activeTab}&page=${pageParam}&size=${POSTS_PER_PAGE}`;
-        // for independent mode, allow reading global main-site posts when on sub-sites
-        const url = sharedMode ? base : `${base}&source=tenant`;
+        const url = `/api/shared/posts?page=${pageParam}&size=${POSTS_PER_PAGE}`;
         const token = session?.access_token || null;
         const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
         const res = await fetch(url, { headers });
@@ -84,7 +79,7 @@ const SocialFeed = () => {
         status,
         refetch
     } = useInfiniteQuery({
-        queryKey: ['posts', activeTab, !!user, siteSettings?.social_forum_mode || ''],
+        queryKey: ['sharedPosts', activeTab, !!user],
         queryFn: fetchPosts,
         initialPageParam: 0,
         getNextPageParam: (lastPage) => lastPage.nextPage,
