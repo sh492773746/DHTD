@@ -340,6 +340,11 @@ async function ensureIndexes() {
 
 await ensureIndexes();
 try { await ensureTenantRequestsSchemaRaw(getGlobalClient()); } catch {}
+// Ensure public storage buckets exist (for client-side uploads using anon key)
+try {
+  const supaInit = getSupabaseAdmin();
+  await ensureBucketPublic(supaInit, 'site-assets');
+} catch {}
 
 async function ensureBucketPublic(supabase, bucket) {
   try {
@@ -681,7 +686,8 @@ app.post('/api/uploads/avatar', async (c) => {
     if (size > MAX_SIZE) return c.json({ error: 'file-too-large' }, 413);
 
     const supa = getSupabaseAdmin();
-    const bucket = 'avatars';
+    const qBucket = c.req.query('bucket');
+    const bucket = (qBucket && /^[a-z0-9-]+$/i.test(qBucket)) ? qBucket : 'avatars';
     await ensureBucketPublic(supa, bucket);
     const safeName = (file.name || 'avatar').replace(/[^a-zA-Z0-9._-]/g, '_');
     const objectPath = `${userId}/${Date.now()}_${safeName}`;
