@@ -438,7 +438,9 @@ app.use('/api/admin/*', async (c, next) => {
     p === '/api/admin/settings' ||
     (p === '/api/admin/tenant-requests' && m === 'POST') ||
     // allow tenant-admin managed page-content routes to pass; in-route will enforce canManageTenant
-    p.startsWith('/api/admin/page-content')
+    p.startsWith('/api/admin/page-content') ||
+    // allow SEO endpoints to enforce tenant-level auth inside
+    p.startsWith('/api/admin/seo/')
   ) {
     // for POST /tenant-requests require login but不要求超管
     if (p === '/api/admin/tenant-requests' && m === 'POST') {
@@ -884,7 +886,7 @@ app.post('/api/admin/bootstrap-super-admin', async (c) => {
 app.post('/api/admin/fix-profile-id', async (c) => {
   try {
     const userId = c.get('userId');
-    if (!userId) return c.json({ ok: false, error: 'unauthorized' }, 401);
+    if (!userId) return c.json({ error: 'unauthorized' }, 401);
     const db = getGlobalDb();
     // Try to find profile by this id first
     const byId = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
