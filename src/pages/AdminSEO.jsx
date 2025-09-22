@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { useTenant } from '@/contexts/TenantContext';
@@ -23,21 +23,36 @@ const bffJson = async (path, { token, method = 'GET', body } = {}) => {
   return await res.json();
 };
 
+const rowsToMap = (rows) => {
+  try {
+    if (!Array.isArray(rows)) return {};
+    return rows.reduce((acc, r) => { acc[r.key] = r.value; return acc; }, {});
+  } catch { return {}; }
+};
+
 const AdminSEO = () => {
-  const { isSuperAdmin, userTenantId, isInitialized, session } = useAuth();
+  const { isSuperAdmin, userTenantId, isInitialized, session, refreshSiteSettings } = useAuth();
   const { activeTenantId } = useTenant();
   const token = session?.access_token || null;
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const prefilledRef = useRef(false);
 
   const managedTenantId = useMemo(() => {
     if (isSuperAdmin) return activeTenantId != null ? activeTenantId : 0;
     return userTenantId ?? activeTenantId ?? null;
   }, [isSuperAdmin, userTenantId, activeTenantId]);
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['seoSuggestions', managedTenantId],
     queryFn: () => bffJson(`/api/admin/seo/suggestions?tenantId=${managedTenantId}`, { token }),
+    enabled: isInitialized && !!token && managedTenantId != null,
+  });
+
+  // Saved settings for prefill
+  const { data: settingsRows } = useQuery({
+    queryKey: ['seoSettings', managedTenantId],
+    queryFn: () => bffJson(`/api/admin/settings?tenantId=${managedTenantId}`, { token }),
     enabled: isInitialized && !!token && managedTenantId != null,
   });
 
@@ -46,11 +61,22 @@ const AdminSEO = () => {
   const [keywords, setKeywords] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Prefill once from saved settings
+  useEffect(() => {
+    if (prefilledRef.current) return;
+    if (settingsRows) {
+      const map = rowsToMap(settingsRows);
+      setDescription(map.site_description || '');
+      setKeywords(map.seo_keywords || '');
+      prefilledRef.current = true;
+    }
+  }, [settingsRows]);
+
   const applySuggestions = () => {
     if (!data?.suggestions) return;
-    setTitle(data.suggestions.title || '');
-    setDescription(data.suggestions.description || '');
-    setKeywords(data.suggestions.keywords || '');
+    if (!title) setTitle(data.suggestions.title || '');
+    if (!description) setDescription(data.suggestions.description || '');
+    if (!keywords) setKeywords(data.suggestions.keywords || '');
   };
 
   const copy = async (text) => {
@@ -67,6 +93,8 @@ const AdminSEO = () => {
       ];
       await bffJson('/api/admin/settings', { token, method: 'POST', body: { tenantId: managedTenantId, updates } });
       queryClient.invalidateQueries({ queryKey: ['adminTenantSettings', managedTenantId] });
+      queryClient.invalidateQueries({ queryKey: ['seoSettings', managedTenantId] });
+      try { refreshSiteSettings && refreshSiteSettings(); } catch {}
       toast({ title: '保存成功', description: 'SEO 设置已更新。' });
     } catch (e) {
       toast({ title: '保存失败', description: e.message, variant: 'destructive' });
