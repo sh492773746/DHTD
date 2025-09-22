@@ -153,8 +153,11 @@ app.use('/api/uploads', __uploadLimiter);
 // JSON body size limit
 const MAX_JSON_BYTES = Number(process.env.MAX_JSON_BYTES || 262144);
 app.use('*', async (c, next) => {
-  const len = Number(c.req.header('content-length') || 0);
-  if (len > MAX_JSON_BYTES) return c.json({ error: 'payload-too-large' }, 413);
+  const ct = String(c.req.header('content-type') || '').toLowerCase();
+  if (ct.includes('application/json') || ct.includes('application/ld+json')) {
+    const len = Number(c.req.header('content-length') || 0);
+    if (len > MAX_JSON_BYTES) return c.json({ error: 'payload-too-large' }, 413);
+  }
   await next();
 });
 
@@ -682,14 +685,15 @@ app.post('/api/uploads/avatar', async (c) => {
     if (!file || typeof file !== 'object') return c.json({ error: 'no-file' }, 400);
 
     // Upload validation: size, type
-    const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+    const qBucket = c.req.query('bucket');
+    const _bucketName = (qBucket && /^[a-z0-9-]+$/i.test(qBucket)) ? qBucket : 'avatars';
+    const MAX_SIZE = _bucketName === 'avatars' ? (5 * 1024 * 1024) : (15 * 1024 * 1024); // 5MB for avatars, else 15MB
     if (!__isAllowedImage(file.type)) return c.json({ error: 'unsupported-type' }, 415);
     const size = Number(file.size || 0);
     if (size > MAX_SIZE) return c.json({ error: 'file-too-large' }, 413);
 
     const supa = getSupabaseAdmin();
-    const qBucket = c.req.query('bucket');
-    const bucket = (qBucket && /^[a-z0-9-]+$/i.test(qBucket)) ? qBucket : 'avatars';
+    const bucket = _bucketName;
     await ensureBucketPublic(supa, bucket);
     const safeName = (file.name || 'avatar').replace(/[^a-zA-Z0-9._-]/g, '_');
     const objectPath = `${userId}/${Date.now()}_${safeName}`;

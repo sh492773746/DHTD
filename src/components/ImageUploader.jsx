@@ -84,7 +84,12 @@ const ImageUploader = ({ initialUrl, onUrlChange, hint, allowUrl = true, uploade
       toast({ title: '上传成功', description: '图片已成功上传并保存。' });
     } catch (error) {
       console.error('Upload error:', error);
-      toast({ title: '上传失败', description: error.message, variant: 'destructive' });
+      const msg = String(error?.message || '').toLowerCase();
+      if (msg.includes('413') || msg.includes('file-too-large') || msg.includes('payload-too-large')) {
+        toast({ title: '上传失败', description: '图片过大，请压缩后重试（建议 ≤ 10-15MB）', variant: 'destructive' });
+      } else {
+        toast({ title: '上传失败', description: error.message, variant: 'destructive' });
+      }
       setImageUrl(initialUrl || ''); // Revert to initial URL on failure
     } finally {
       setUploading(false);
