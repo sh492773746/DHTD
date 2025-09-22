@@ -3236,12 +3236,25 @@ app.get('/api/shared/posts', async (c) => {
     const authorIds = Array.from(new Set((rows || []).map(r => r.authorId)));
     let authors = [];
     if (authorIds.length) authors = await db.select().from(sharedProfiles).where(inArray(sharedProfiles.id, authorIds));
-    // ensure uid for authors
+    // ensure uid/backfill shared_profiles from base profiles
     for (const a of authors || []) {
       if (!a.uid) { try { await ensureUid(getGlobalDb(), profiles, profiles.id, a.id); } catch {} }
     }
+    const existingIds = new Set((authors || []).map(a => a.id));
+    const missing = authorIds.filter(id => !existingIds.has(id));
+    if (missing.length > 0) {
+      const baseProfiles = await db.select().from(profiles).where(inArray(profiles.id, missing));
+      const now = new Date().toISOString();
+      for (const m of missing) {
+        const base = (baseProfiles || []).find(b => b.id === m);
+        const username = base?.username || '用户';
+        const avatarUrl = base?.avatarUrl || null;
+        try { await db.insert(sharedProfiles).values({ id: m, username, avatarUrl, createdAt: now }); } catch {}
+        try { await ensureUid(getGlobalDb(), profiles, profiles.id, m); } catch {}
+      }
+    }
     const rereadAuthors = authorIds.length ? await db.select().from(sharedProfiles).where(inArray(sharedProfiles.id, authorIds)) : [];
-    const authorMap = new Map(rereadAuthors.map(a => [a.id, { id: a.id, username: a.username, avatar_url: a.avatarUrl, uid: a.uid }]));
+    const authorMap = new Map((rereadAuthors || []).map(a => [a.id, { id: a.id, username: a.username, avatar_url: a.avatarUrl, uid: a.uid }]));
     // counts
     const withCounts = [];
     const userId = c.get('userId');

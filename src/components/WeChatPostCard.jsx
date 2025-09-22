@@ -22,7 +22,7 @@ import PostImageGrid from '@/components/wechat-post-card/PostImageGrid';
 import PostFooter from '@/components/wechat-post-card/PostFooter';
 
 const WeChatPostCard = ({ post, onPostUpdated, onDeletePost }) => {
-  const { user, isAdmin, session } = useAuth();
+  const { user, isAdmin, isSuperAdmin, session, siteSettings } = useAuth();
   const { toast } = useToast();
   
   const [hasLiked, setHasLiked] = React.useState(!!post.likedByMe);
@@ -35,18 +35,22 @@ const WeChatPostCard = ({ post, onPostUpdated, onDeletePost }) => {
   const [currentLightboxImage, setCurrentLightboxImage] = React.useState(null);
 
   const isAuthor = user && post.author?.id === user.id;
+  const sharedMode = String(siteSettings?.social_forum_mode || '').toLowerCase() === 'shared';
+  const canAdmin = sharedMode ? isSuperAdmin : isAdmin;
+  const token = session?.access_token || '';
 
   React.useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch(`/api/comments?postId=${encodeURIComponent(post.id)}`);
+        const endpoint = sharedMode ? `/api/shared/comments?postId=${encodeURIComponent(post.id)}` : `/api/comments?postId=${encodeURIComponent(post.id)}`;
+        const res = await fetch(endpoint);
         if (!res.ok) return;
         const data = await res.json();
         setComments(data || []);
       } catch {}
     };
     load();
-  }, [post.id]);
+  }, [post.id, sharedMode]);
 
   React.useEffect(() => {
     setHasLiked(!!post.likedByMe);
@@ -69,10 +73,12 @@ const WeChatPostCard = ({ post, onPostUpdated, onDeletePost }) => {
     setLikesCount(prev => newHasLiked ? prev + 1 : Math.max(0, prev - 1));
 
     try {
-      const res = await fetch('/api/likes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
-        body: JSON.stringify({ postId: post.id, like: newHasLiked })
+      const likeUrl = sharedMode ? '/api/shared/likes' : '/api/likes';
+      const method = newHasLiked ? 'POST' : 'DELETE';
+      const res = await fetch(likeUrl, {
+        method,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ postId: post.id })
       });
       if (!res.ok) throw new Error('like failed');
     } catch (e) {
@@ -83,7 +89,7 @@ const WeChatPostCard = ({ post, onPostUpdated, onDeletePost }) => {
   };
   
   const handleToggleComments = () => {
-    if (post.status !== 'approved' && !isAuthor && !isAdmin && !user) {
+    if (post.status !== 'approved' && !isAuthor && !canAdmin && !user) {
         toast({ variant: "destructive", title: "操作无效", description: "帖子审核通过后才能评论。" });
         return;
     }
@@ -92,7 +98,8 @@ const WeChatPostCard = ({ post, onPostUpdated, onDeletePost }) => {
   
   const handleDeletePost = async () => {
     try {
-      const res = await fetch(`/api/posts/${post.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${session?.access_token || ''}` } });
+      const url = sharedMode ? `/api/shared/posts/${post.id}` : `/api/posts/${post.id}`;
+      const res = await fetch(url, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error('failed');
       toast({ title: "删除成功", description: "帖子已删除。" });
       onDeletePost(post.id);
@@ -104,9 +111,10 @@ const WeChatPostCard = ({ post, onPostUpdated, onDeletePost }) => {
   
   const handleTogglePin = async () => {
     try {
-      const res = await fetch(`/api/posts/${post.id}/pin`, {
+      const url = sharedMode ? `/api/shared/posts/${post.id}/pin` : `/api/posts/${post.id}/pin`;
+      const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ pinned: !post.is_pinned && !post.isPinned })
       });
       if (!res.ok) throw new Error('failed');
@@ -117,9 +125,9 @@ const WeChatPostCard = ({ post, onPostUpdated, onDeletePost }) => {
       toast({ variant: "destructive", title: "操作失败" });
     }
   };
-  
+
   const handleEditClick = () => {
-    if (post.edit_count > 0 && !isAdmin) {
+    if (post.edit_count > 0 && !canAdmin) {
       toast({
         title: "编辑次数已用完",
         description: "每个帖子只能编辑一次。",
@@ -161,7 +169,7 @@ const WeChatPostCard = ({ post, onPostUpdated, onDeletePost }) => {
         transition={{ duration: 0.3 }}
         className="bg-white rounded-lg shadow-sm border border-gray-100 mb-4 p-4 md:p-6"
       >
-        <PostHeader post={post} isAuthor={isAuthor} isAdmin={isAdmin} onEdit={handleEditClick} onTogglePin={handleTogglePin} onDelete={() => setIsDeleting(true)} />
+        <PostHeader post={post} isAuthor={isAuthor} isAdmin={canAdmin} onEdit={handleEditClick} onTogglePin={handleTogglePin} onDelete={() => setIsDeleting(true)} />
         <PostContent content={post.content} />
         {post.image_urls && post.image_urls.length > 0 && (
           <PostImageGrid images={post.image_urls} postId={post.id} onImageClick={setCurrentLightboxImage} />
