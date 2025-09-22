@@ -653,10 +653,24 @@ app.post('/api/uploads/post-images', async (c) => {
       const objectPath = `${userId}/${Date.now()}_${safeName}`;
       const buf = Buffer.from(await file.arrayBuffer());
       let outBuf = buf;
-      try { outBuf = await sharp(buf).rotate().jpeg({ quality: 90 }).toBuffer(); } catch {}
+      try {
+        const type = String(file.type || '').toLowerCase();
+        const isPng = type.includes('png');
+        const isJpeg = type.includes('jpeg') || type.includes('jpg');
+        const isWebp = type.includes('webp');
+        if (buf.length <= 2 * 1024 * 1024 && (isWebp || isJpeg || isPng)) {
+          outBuf = buf; // 小文件直接透传，减少等待时间
+        } else if (isPng) {
+          outBuf = await sharp(buf).rotate().png({ compressionLevel: 9 }).toBuffer();
+        } else if (isWebp) {
+          outBuf = await sharp(buf).rotate().webp({ quality: 85 }).toBuffer();
+        } else {
+          outBuf = await sharp(buf).rotate().jpeg({ quality: 90 }).toBuffer();
+        }
+      } catch {}
       const { error: upErr } = await supa.storage
         .from(bucket)
-        .upload(objectPath, outBuf, { contentType: file.type || 'image/jpeg', cacheControl: '3600', upsert: false });
+        .upload(objectPath, outBuf, { contentType: (file.type || 'image/jpeg'), cacheControl: '3600', upsert: false });
       if (upErr) {
         if (String(upErr.message || '').includes('exists')) {
           const { data: { publicUrl } } = supa.storage.from(bucket).getPublicUrl(objectPath);
@@ -700,16 +714,23 @@ app.post('/api/uploads/avatar', async (c) => {
     const buf = Buffer.from(await file.arrayBuffer());
     let outBuf = buf;
     try {
-      // Preserve transparency with PNG if source has alpha; otherwise JPEG for size
-      if ((file.type || '').toLowerCase().includes('png')) {
+      const type = String(file.type || '').toLowerCase();
+      const isPng = type.includes('png');
+      const isJpeg = type.includes('jpeg') || type.includes('jpg');
+      const isWebp = type.includes('webp');
+      if (buf.length <= 2 * 1024 * 1024 && (isWebp || isJpeg || isPng)) {
+        outBuf = buf; // 小文件直接透传，减少等待时间
+      } else if (isPng) {
         outBuf = await sharp(buf).rotate().png({ compressionLevel: 9 }).toBuffer();
+      } else if (isWebp) {
+        outBuf = await sharp(buf).rotate().webp({ quality: 85 }).toBuffer();
       } else {
         outBuf = await sharp(buf).rotate().jpeg({ quality: 90 }).toBuffer();
       }
     } catch {}
     const { error: upErr } = await supa.storage
       .from(bucket)
-      .upload(objectPath, outBuf, { contentType: file.type || 'image/jpeg', cacheControl: '3600', upsert: true });
+      .upload(objectPath, outBuf, { contentType: (file.type || 'image/jpeg'), cacheControl: '3600', upsert: true });
     if (upErr) throw upErr;
     const { data: { publicUrl } } = supa.storage.from(bucket).getPublicUrl(objectPath);
     return c.json({ url: publicUrl });

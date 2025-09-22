@@ -8,6 +8,35 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 
+async function compressImage(file, { maxW = 1920, maxH = 1920, quality = 0.82 } = {}) {
+  try {
+    const bitmap = await createImageBitmap(file);
+    let { width, height } = bitmap;
+    const scale = Math.min(1, maxW / width, maxH / height);
+    const targetW = Math.round(width * scale);
+    const targetH = Math.round(height * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = targetW; canvas.height = targetH;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(bitmap, 0, 0, targetW, targetH);
+    const isPng = (file.type || '').toLowerCase().includes('png');
+    const hasAlpha = true; // assume alpha possible for PNG
+    if (isPng && hasAlpha) {
+      // Keep PNG if transparency likely; limit size growth by scaling
+      const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+      return blob && blob.size < file.size ? new File([blob], file.name.replace(/\.(png|jpg|jpeg|webp)$/i, '.png'), { type: 'image/png' }) : file;
+    }
+    const mime = 'image/webp';
+    const blob = await new Promise(res => canvas.toBlob(res, mime, quality));
+    if (blob && blob.size < file.size) {
+      return new File([blob], file.name.replace(/\.(png|jpg|jpeg|webp)$/i, '.webp'), { type: mime });
+    }
+    return file;
+  } catch {
+    return file;
+  }
+}
+
 const ImageUploader = ({ initialUrl, onUrlChange, hint, allowUrl = true, uploaderHeight = "h-48", bucketName = 'post-images' }) => {
   const [imageUrl, setImageUrl] = useState(initialUrl || '');
   const [uploading, setUploading] = useState(false);
@@ -33,19 +62,23 @@ const ImageUploader = ({ initialUrl, onUrlChange, hint, allowUrl = true, uploade
       toast({ title: '错误', description: '数据库客户端未初始化。', variant: 'destructive' });
       return;
     }
-    
     setUploading(true);
-    const localImageUrl = URL.createObjectURL(file);
-    localUrlRef.current = localImageUrl;
-    setImageUrl(localImageUrl);
 
-    const fileName = `${Date.now()}_${file.name}`;
+    // Local preview ASAP
+    const previewUrl = URL.createObjectURL(file);
+    localUrlRef.current = previewUrl;
+    setImageUrl(previewUrl);
+
+    // Client compress to speed up
+    const optimized = await compressImage(file);
+
+    const fileName = `${Date.now()}_${optimized.name || file.name}`;
 
     try {
       const { data, error } = await supabase
         .storage
         .from(bucketName)
-        .upload(fileName, file, {
+        .upload(fileName, optimized, {
           cacheControl: '3600',
           upsert: false,
         });
@@ -53,7 +86,7 @@ const ImageUploader = ({ initialUrl, onUrlChange, hint, allowUrl = true, uploade
       if (error) {
         // Try server-side upload fallback to bypass RLS
         const form = new FormData();
-        form.append('file', file);
+        form.append('file', optimized);
         let jwt = null;
         try {
           const { data: s } = await supabase.auth.getSession();
@@ -72,15 +105,13 @@ const ImageUploader = ({ initialUrl, onUrlChange, hint, allowUrl = true, uploade
         toast({ title: '上传成功', description: '已使用服务端上传。' });
         return;
       }
-      
       const { data: { publicUrl } } = supabase
         .storage
         .from(bucketName)
         .getPublicUrl(data.path);
-      
       const finalUrl = `${publicUrl}?t=${new Date().getTime()}`;
       setImageUrl(finalUrl);
-      onUrlChange(publicUrl); // Pass the raw URL without timestamp to be saved
+      onUrlChange(publicUrl);
       toast({ title: '上传成功', description: '图片已成功上传并保存。' });
     } catch (error) {
       console.error('Upload error:', error);
@@ -90,7 +121,7 @@ const ImageUploader = ({ initialUrl, onUrlChange, hint, allowUrl = true, uploade
       } else {
         toast({ title: '上传失败', description: error.message, variant: 'destructive' });
       }
-      setImageUrl(initialUrl || ''); // Revert to initial URL on failure
+      setImageUrl(initialUrl || '');
     } finally {
       setUploading(false);
       if (localUrlRef.current) {
@@ -102,9 +133,7 @@ const ImageUploader = ({ initialUrl, onUrlChange, hint, allowUrl = true, uploade
 
   const onDrop = useCallback((acceptedFiles) => {
     const file = acceptedFiles[0];
-    if (file) {
-      handleUpload(file);
-    }
+    if (file) handleUpload(file);
   }, [handleUpload]);
 
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
@@ -121,13 +150,13 @@ const ImageUploader = ({ initialUrl, onUrlChange, hint, allowUrl = true, uploade
   };
 
   const handleUrlSubmit = () => {
-      if (urlInput && (urlInput.startsWith('http://') || urlInput.startsWith('https://'))) {
-          setImageUrl(urlInput);
-          onUrlChange(urlInput);
-          toast({ title: '图片链接已设置' });
-      } else {
-          toast({ title: '链接无效', description: '请输入有效的图片URL', variant: 'destructive' });
-      }
+    if (urlInput && (urlInput.startsWith('http://') || urlInput.startsWith('https://'))) {
+      setImageUrl(urlInput);
+      onUrlChange(urlInput);
+      toast({ title: '图片链接已设置' });
+    } else {
+      toast({ title: '链接无效', description: '请输入有效的图片URL', variant: 'destructive' });
+    }
   };
 
   const displayUrl = imageUrl.includes('?') ? imageUrl : `${imageUrl}?t=${new Date().getTime()}`;
