@@ -430,6 +430,7 @@ app.use('/api/admin/*', async (c, next) => {
     p === '/api/admin/tenant-admins' ||
     p === '/api/admin/bootstrap-super-admin' ||
     p === '/api/admin/tenant-requests/check-domain' ||
+    p === '/api/admin/settings' ||
     (p === '/api/admin/tenant-requests' && m === 'POST') ||
     // allow tenant-admin managed page-content routes to pass; in-route will enforce canManageTenant
     p.startsWith('/api/admin/page-content')

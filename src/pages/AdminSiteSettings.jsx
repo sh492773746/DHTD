@@ -54,15 +54,16 @@ const AdminSiteSettings = () => {
 
     const managedTenantId = useMemo(() => {
         if (isSuperAdmin) {
-            return tenantIdFromContext !== null ? tenantIdFromContext : 0;
+            return tenantIdFromContext != null ? tenantIdFromContext : 0;
         }
-        return userTenantId;
+        // tenant admin: prefer assigned tenant id, fallback to context-resolved id
+        return (userTenantId ?? tenantIdFromContext ?? null);
     }, [tenantIdFromContext, isSuperAdmin, userTenantId]);
 
     const { data: allSettings, isLoading } = useQuery({
         queryKey: ['adminTenantSettings', managedTenantId, !!token],
         queryFn: () => fetchTenantSettingsBff(token, managedTenantId),
-        enabled: isInitialized && managedTenantId !== undefined && !!token,
+        enabled: isInitialized && managedTenantId != null && !!token,
     });
 
     const { data: managedTenantInfo } = useQuery({
