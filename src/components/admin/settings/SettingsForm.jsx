@@ -7,7 +7,15 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import ImageUploader from '@/components/ImageUploader';
 
-const HIDDEN_KEYS = new Set(['global_obfuscate_text_enabled']);
+const HIDDEN_KEYS = new Set([
+  'global_obfuscate_text_enabled',
+  'site_description',
+  'seo_title_suffix',
+  'seo_keywords',
+  'seo_meta_image',
+  'seo_indexable',
+  'seo_sitemap_enabled',
+]);
 
 const SettingsForm = ({ settings, onInputChange, onRevertToDefault, isSuperAdmin, isManagingSubTenant, tenantEditableKeys }) => {
   const renderSettingInput = (key, setting) => {

@@ -72,7 +72,7 @@ const AdminSiteSettings = () => {
         enabled: isInitialized && !!managedTenantId && managedTenantId !== 0 && !!token,
     });
     
-    const tenantEditableKeys = ['site_name', 'site_description', 'site_logo'];
+    const tenantEditableKeys = ['site_name', 'site_logo'];
 
     useEffect(() => {
         if (allSettings) {
