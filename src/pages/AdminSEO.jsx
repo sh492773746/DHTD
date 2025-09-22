@@ -103,12 +103,12 @@ const AdminSEO = () => {
                 <Input value={keywords} onChange={e=>setKeywords(e.target.value)} placeholder={data.suggestions?.keywords || ''} />
                 <div className="text-xs text-muted-foreground mt-1">数量：{(keywords||data.suggestions?.keywords||'').split(',').filter(Boolean).length}（{data.checks?.keywords?.ok ? '合格' : '建议 4-12'}）</div>
               </div>
-              <div className="flex gap-2">
-                <Button type="button" variant="secondary" onClick={applySuggestions}><CheckCircle2 className="h-4 w-4 mr-1" /> 一键填充建议</Button>
-                <Button type="button" variant="outline" onClick={()=>copy(`${title||data.suggestions?.title}`)}><Clipboard className="h-4 w-4 mr-1" /> 复制Title</Button>
-                <Button type="button" variant="outline" onClick={()=>copy(`${description||data.suggestions?.description}`)}><Clipboard className="h-4 w-4 mr-1" /> 复制Description</Button>
-                <Button type="button" variant="outline" onClick={()=>copy(`${keywords||data.suggestions?.keywords}`)}><Clipboard className="h-4 w-4 mr-1" /> 复制Keywords</Button>
-                <Button type="button" onClick={saveToSettings} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : '保存到站点设置'}</Button>
+              <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                <Button type="button" variant="secondary" className="w-full sm:w-auto" onClick={applySuggestions}><CheckCircle2 className="h-4 w-4 mr-1" /> 一键填充建议</Button>
+                <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={()=>copy(`${title||data.suggestions?.title}`)}><Clipboard className="h-4 w-4 mr-1" /> 复制Title</Button>
+                <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={()=>copy(`${description||data.suggestions?.description}`)}><Clipboard className="h-4 w-4 mr-1" /> 复制Description</Button>
+                <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={()=>copy(`${keywords||data.suggestions?.keywords}`)}><Clipboard className="h-4 w-4 mr-1" /> 复制Keywords</Button>
+                <Button type="button" className="w-full sm:w-auto" onClick={saveToSettings} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : '保存到站点设置'}</Button>
               </div>
             </div>
           )}
