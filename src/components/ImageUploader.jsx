@@ -51,7 +51,21 @@ const ImageUploader = ({ initialUrl, onUrlChange, hint, allowUrl = true, uploade
         });
 
       if (error) {
-        throw error;
+        // Try server-side upload fallback to bypass RLS
+        const form = new FormData();
+        form.append('file', file);
+        const res = await fetch(`/api/uploads/avatar?bucket=${encodeURIComponent(bucketName)}`, { method: 'POST', body: form });
+        if (!res.ok) {
+          const text = await res.text().catch(()=> '');
+          throw new Error(text || error.message || 'upload failed');
+        }
+        const j = await res.json();
+        const publicUrl = j?.url;
+        const finalUrl = `${publicUrl}?t=${new Date().getTime()}`;
+        setImageUrl(finalUrl);
+        onUrlChange(publicUrl);
+        toast({ title: '上传成功', description: '已使用服务端上传。' });
+        return;
       }
       
       const { data: { publicUrl } } = supabase

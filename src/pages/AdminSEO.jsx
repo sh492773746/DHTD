@@ -36,7 +36,7 @@ const AdminSEO = () => {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['seoSuggestions', managedTenantId],
     queryFn: () => bffJson(`/api/admin/seo/suggestions?tenantId=${managedTenantId}`, { token }),
-    enabled: isInitialized && token && managedTenantId != null && managedTenantId !== 0,
+    enabled: isInitialized && !!token && managedTenantId != null,
   });
 
   const [title, setTitle] = useState('');
