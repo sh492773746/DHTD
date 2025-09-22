@@ -3280,28 +3280,36 @@ app.get('/api/shared/posts', async (c) => {
     }
     const rereadAuthors = authorIds.length ? await db.select().from(sharedProfiles).where(inArray(sharedProfiles.id, authorIds)) : [];
     const authorMap = new Map((rereadAuthors || []).map(a => [a.id, { id: a.id, username: a.username, avatar_url: a.avatarUrl, uid: a.uid }]));
-    // counts
-    const withCounts = [];
-    const userId = c.get('userId');
-    // prefetch likedByMe map
-    let likedSet = new Set();
-    if (userId && (rows || []).length > 0) {
-      const ids = (rows || []).map(r => r.id);
-      const likedRows = await db.select({ pid: sharedLikes.postId }).from(sharedLikes).where(and(eq(sharedLikes.userId, userId), inArray(sharedLikes.postId, ids)));
-      likedSet = new Set((likedRows || []).map(r => r.pid));
-    }
-    for (const r of rows || []) {
-      const lc = await db.select({ c: sql`count(1)` }).from(sharedLikes).where(eq(sharedLikes.postId, r.id));
-      const cc = await db.select({ c: sql`count(1)` }).from(sharedComments).where(eq(sharedComments.postId, r.id));
-      withCounts.push({
-        ...r,
-        author: authorMap.get(r.authorId) || null,
-        likesCount: Number(lc?.[0]?.c || 0),
-        commentsCount: Number(cc?.[0]?.c || 0),
-        likedByMe: userId ? likedSet.has(r.id) : false,
-      });
-    }
-    return c.json(withCounts);
+    // fallback source: base profiles for missing fields
+    const baseAll = authorIds.length ? await db.select().from(profiles).where(inArray(profiles.id, authorIds)) : [];
+    const baseMap = new Map((baseAll || []).map(b => [b.id, { id: b.id, username: b.username, avatar_url: b.avatarUrl }]));
+     // counts
+     const withCounts = [];
+     const userId = c.get('userId');
+     // prefetch likedByMe map
+     let likedSet = new Set();
+     if (userId && (rows || []).length > 0) {
+       const ids = (rows || []).map(r => r.id);
+       const likedRows = await db.select({ pid: sharedLikes.postId }).from(sharedLikes).where(and(eq(sharedLikes.userId, userId), inArray(sharedLikes.postId, ids)));
+       likedSet = new Set((likedRows || []).map(r => r.pid));
+     }
+     for (const r of rows || []) {
+       const lc = await db.select({ c: sql`count(1)` }).from(sharedLikes).where(eq(sharedLikes.postId, r.id));
+       const cc = await db.select({ c: sql`count(1)` }).from(sharedComments).where(eq(sharedComments.postId, r.id));
+       let author = authorMap.get(r.authorId) || null;
+       if (!author) {
+         const base = baseMap.get(r.authorId);
+         if (base) author = base;
+       }
+       withCounts.push({
+         ...r,
+         author,
+         likesCount: Number(lc?.[0]?.c || 0),
+         commentsCount: Number(cc?.[0]?.c || 0),
+         likedByMe: userId ? likedSet.has(r.id) : false,
+       });
+     }
+     return c.json(withCounts);
   } catch (e) {
     console.error('GET /api/shared/posts error', e);
     return c.json([]);
