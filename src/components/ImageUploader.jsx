@@ -54,7 +54,12 @@ const ImageUploader = ({ initialUrl, onUrlChange, hint, allowUrl = true, uploade
         // Try server-side upload fallback to bypass RLS
         const form = new FormData();
         form.append('file', file);
-        const res = await fetch(`/api/uploads/avatar?bucket=${encodeURIComponent(bucketName)}`, { method: 'POST', body: form });
+        let jwt = null;
+        try {
+          const { data: s } = await supabase.auth.getSession();
+          jwt = s?.session?.access_token || null;
+        } catch {}
+        const res = await fetch(`/api/uploads/avatar?bucket=${encodeURIComponent(bucketName)}`, { method: 'POST', body: form, headers: jwt ? { Authorization: `Bearer ${jwt}` } : {} });
         if (!res.ok) {
           const text = await res.text().catch(()=> '');
           throw new Error(text || error.message || 'upload failed');
