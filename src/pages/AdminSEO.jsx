@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Clipboard, CheckCircle2 } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
 
 const bffJson = async (path, { token, method = 'GET', body } = {}) => {
   const res = await fetch(path, {
@@ -27,6 +28,7 @@ const AdminSEO = () => {
   const { activeTenantId } = useTenant();
   const token = session?.access_token || null;
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const managedTenantId = useMemo(() => {
     if (isSuperAdmin) return activeTenantId != null ? activeTenantId : 0;
@@ -65,8 +67,9 @@ const AdminSEO = () => {
       ];
       await bffJson('/api/admin/settings', { token, method: 'POST', body: { tenantId: managedTenantId, updates } });
       queryClient.invalidateQueries({ queryKey: ['adminTenantSettings', managedTenantId] });
+      toast({ title: '保存成功', description: 'SEO 设置已更新。' });
     } catch (e) {
-      // ignore toast for brevity
+      toast({ title: '保存失败', description: e.message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }

@@ -67,7 +67,7 @@ const GameCenter = () => {
                 <title>{String('游戏中心 - ' + (siteSettings?.site_name ?? '大海团队官网'))}</title>
                 <meta name="description" content={`探索${siteSettings?.site_name || '大海团队官网'}的游戏中心，发现各种精彩游戏。`} />
             </Helmet>
-            <div className="max-w-7xl mx-auto px-4 py-8">
+            <div className="max-w-7xl mx-auto px-3 sm:px-4 py-6 sm:py-8">
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -78,7 +78,7 @@ const GameCenter = () => {
                     {isLoading || !isInitialized ? renderSkeleton() : (
                         categories.length > 0 ? (
                             <>
-                                <div className="flex space-x-2 p-1 bg-gray-100 dark:bg-gray-800 rounded-full overflow-x-auto mb-6 sticky top-16 z-10 backdrop-blur-sm">
+                                <div className="flex space-x-2 p-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-x-auto mb-4 sm:mb-6 sticky top-14 sm:top-16 z-10 backdrop-blur-sm">
                                     {categories.map(category => (
                                         <Button
                                             key={category.slug}
@@ -100,7 +100,7 @@ const GameCenter = () => {
                                     initial={{ opacity: 0, y: 10 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ duration: 0.3 }}
-                                    className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-2 md:gap-4"
+                                    className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-2 sm:gap-3 md:gap-4"
                                 >
                                     {activeGames.map((game, index) => (
                                         <GameCard key={game.id || index} game={game} />

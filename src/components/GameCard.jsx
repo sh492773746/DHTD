@@ -72,7 +72,7 @@ const GameCard = ({ game }) => {
         className="relative"
       >
         <Card
-          className="bg-secondary rounded-lg shadow-sm border border-border text-center p-1 flex flex-col items-center justify-between aspect-square cursor-pointer card-hover"
+          className="bg-secondary rounded-lg shadow-sm border border-border text-center p-1.5 sm:p-1 flex flex-col items-center justify-between aspect-square cursor-pointer card-hover"
           onClick={() => handleNavigate(game.path, game.requiresAuth)}
         >
           {game.isOfficial && (
@@ -85,14 +85,14 @@ const GameCard = ({ game }) => {
               </Badge>
             </div>
           )}
-          <div className="w-10 h-10 rounded-md flex items-center justify-center mt-0.5 mb-0.5 overflow-hidden bg-secondary">
+          <div className="w-12 h-12 sm:w-10 sm:h-10 rounded-md flex items-center justify-center mt-0.5 mb-0.5 overflow-hidden bg-secondary">
              {game.iconUrl ? (
-                <img src={game.iconUrl} alt={game.title} className="w-full h-full object-cover" />
+                <img src={game.iconUrl} alt={game.title} className="w-full h-full object-contain bg-transparent" />
               ) : (
                 <Gamepad2 className="w-6 h-6 text-foreground" />
               )}
           </div>
-          <h3 className="text-xs font-semibold text-foreground mb-0">
+          <h3 className="text-[11px] sm:text-xs font-semibold text-foreground mb-0 line-clamp-1">
             {game.title}
           </h3>
           <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
@@ -108,11 +108,11 @@ const GameCard = ({ game }) => {
                   {game.description}
               </PopoverContent>
           </Popover>
-          <div className="flex items-center justify-center text-muted-foreground text-[10px] mb-0 scale-90">
+          <div className="flex items-center justify-center text-muted-foreground text-[10px] mb-0 scale-95 sm:scale-90">
              <Info className="w-2.5 h-2.5 mr-0.5 text-foreground" />
              {game.info}
           </div>
-          <Button variant="default" className="w-full text-xs h-6 mt-0.5">
+          <Button variant="default" className="w-full text-xs h-7 sm:h-6 mt-0.5">
             进入游戏
           </Button>
         </Card>
