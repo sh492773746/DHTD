@@ -695,7 +695,14 @@ app.post('/api/uploads/avatar', async (c) => {
     const objectPath = `${userId}/${Date.now()}_${safeName}`;
     const buf = Buffer.from(await file.arrayBuffer());
     let outBuf = buf;
-    try { outBuf = await sharp(buf).rotate().jpeg({ quality: 90 }).toBuffer(); } catch {}
+    try {
+      // Preserve transparency with PNG if source has alpha; otherwise JPEG for size
+      if ((file.type || '').toLowerCase().includes('png')) {
+        outBuf = await sharp(buf).rotate().png({ compressionLevel: 9 }).toBuffer();
+      } else {
+        outBuf = await sharp(buf).rotate().jpeg({ quality: 90 }).toBuffer();
+      }
+    } catch {}
     const { error: upErr } = await supa.storage
       .from(bucket)
       .upload(objectPath, outBuf, { contentType: file.type || 'image/jpeg', cacheControl: '3600', upsert: true });
@@ -5283,6 +5290,69 @@ app.get('/api/tenants/:id', async (c) => {
       status: row.status || 'pending',
       created_at: row.createdAt || row.created_at || null,
     });
+  } catch (e) {
+    return c.json({ error: 'failed' }, 500);
+  }
+});
+
+// SEO suggestions
+app.get('/api/admin/seo/suggestions', async (c) => {
+  try {
+    const userId = c.get('userId'); if (!userId) return c.json({ error: 'unauthorized' }, 401);
+    const qTenantIdRaw = c.req.query('tenantId');
+    const tenantId = qTenantIdRaw != null && qTenantIdRaw !== '' ? Number(qTenantIdRaw) : 0;
+    const isSuper = await isSuperAdminUser(userId);
+    if (tenantId === 0) {
+      if (!isSuper) return c.json({ error: 'forbidden' }, 403);
+    } else {
+      const allowed = await canManageTenant(userId, tenantId);
+      if (!allowed) return c.json({ error: 'forbidden' }, 403);
+    }
+    const db = await getTursoClientForTenant(tenantId);
+    const settingsRows = await db.select().from(appSettings).where(eq(appSettings.tenantId, tenantId));
+    const settings = {}; for (const r of settingsRows || []) settings[r.key] = r.value;
+    const siteName = settings['site_name'] || (tenantId ? `分站 #${tenantId}` : '主站');
+    const siteDesc = (settings['site_description'] || '').trim();
+
+    let pcs = [];
+    try { pcs = await db.select().from(pageContentTable).where(eq(pageContentTable.tenantId, tenantId)); } catch {}
+    const textSnippets = [];
+    for (const row of pcs || []) {
+      try {
+        const obj = JSON.parse(row.content || '{}');
+        for (const v of Object.values(obj)) {
+          if (typeof v === 'string') {
+            const s = v.trim();
+            if (s && s.length >= 6) textSnippets.push(s);
+          }
+        }
+      } catch {}
+    }
+    const corpus = [siteName, siteDesc, ...textSnippets].join(' ');
+    const safe = (s, max) => (s || '').replace(/\s+/g, ' ').trim().slice(0, max);
+
+    const baseTitle = siteDesc ? `${siteName}：${siteDesc}` : `${siteName} - 官方网站`;
+    const title = safe(baseTitle, 60);
+    const titleLen = title.length;
+
+    let description = siteDesc || corpus.slice(0, 180);
+    if (!description) description = `${siteName}，提供优质内容与服务。`;
+    description = safe(description, 160);
+    const descLen = description.length;
+
+    const words = (corpus.toLowerCase().match(/[\p{Letter}\p{Number}]+/gu) || [])
+      .filter(w => w.length >= 2).slice(0, 200);
+    const freq = new Map(); for (const w of words) freq.set(w, (freq.get(w) || 0) + 1);
+    const top = Array.from(freq.entries()).sort((a,b) => b[1]-a[1]).slice(0, 10).map(x => x[0]);
+    const keywords = top.join(',');
+
+    const checks = {
+      title: { length: titleLen, ok: titleLen >= 45 && titleLen <= 60 },
+      description: { length: descLen, ok: descLen >= 120 && descLen <= 160 },
+      keywords: { count: top.length, ok: top.length >= 4 && top.length <= 12 },
+    };
+
+    return c.json({ tenantId, suggestions: { title, description, keywords }, checks });
   } catch (e) {
     return c.json({ error: 'failed' }, 500);
   }
