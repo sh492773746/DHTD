@@ -25,7 +25,14 @@ const GameCard = ({ game }) => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  const isExternal = (path) => /^https?:\/\//i.test(String(path || ''));
+
   const handleNavigate = (path, requiresAuth) => {
+    if (!path) return;
+    if (isExternal(path)) {
+      window.open(path, '_blank', 'noopener,noreferrer');
+      return;
+    }
     if (requiresAuth) {
       toast({
         title: "请先登录",

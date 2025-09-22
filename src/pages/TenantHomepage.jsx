@@ -12,6 +12,18 @@ import * as LucideIcons from 'lucide-react';
 
 const FeatureCard = ({ title, description, path, icon, style }) => {
     const IconComponent = LucideIcons[icon];
+    const isExternal = /^https?:\/\//i.test(String(path || ''));
+    if (isExternal) {
+        return (
+            <a href={path} target="_blank" rel="noopener noreferrer" className={`block p-6 rounded-2xl bg-gradient-to-br ${style} text-white shadow-lg transform hover:-translate-y-1 transition-transform duration-300`}>
+                <div className="flex items-center mb-2">
+                    {IconComponent && <IconComponent className="w-6 h-6 mr-3" />}
+                    <h3 className="font-bold text-lg">{title}</h3>
+                </div>
+                <p className="text-sm opacity-90">{description}</p>
+            </a>
+        );
+    }
     return (
         <Link to={path} className={`block p-6 rounded-2xl bg-gradient-to-br ${style} text-white shadow-lg transform hover:-translate-y-1 transition-transform duration-300`}>
             <div className="flex items-center mb-2">

@@ -25,6 +25,8 @@ const FeatureCarousel = ({ cards }) => {
     ...LucideIcons
   };
 
+  const isExternal = (path) => /^https?:\/\//i.test(String(path || ''));
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {cards.map((card, index) => {
@@ -40,7 +42,11 @@ const FeatureCarousel = ({ cards }) => {
             <Button
               variant="secondary"
               className={cn("h-20 w-full rounded-xl shadow-lg border border-border hover:bg-secondary/80")}
-              onClick={() => card.path ? navigate(card.path) : toast({ title: "🚧 该功能正在开发中", description: "敬请期待更多精彩！" })}
+              onClick={() => {
+                if (!card.path) { toast({ title: "🚧 该功能正在开发中", description: "敬请期待更多精彩！" }); return; }
+                if (isExternal(card.path)) { window.open(card.path, '_blank', 'noopener,noreferrer'); return; }
+                navigate(card.path);
+              }}
             >
               <div className="flex items-center h-full w-full">
                 <motion.div
