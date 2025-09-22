@@ -1118,7 +1118,7 @@ app.get('/api/settings', async (c) => {
     const tenantKeys = new Set();
     for (const r of rowsTenant || []) { map[r.key] = r.value; tenantKeys.add(r.key); }
     // strict tenant-only keys should never fall back to main
-    const STRICT_KEYS = new Set(['site_name','site_logo','logo_url','site_favicon','site_description']);
+    const STRICT_KEYS = new Set(['site_name','site_logo','logo_url','site_favicon','site_description','seo_title_suffix','seo_keywords','seo_meta_image','seo_indexable','seo_sitemap_enabled']);
     for (const k of STRICT_KEYS) {
       if (!tenantKeys.has(k)) {
         if (k === 'site_name' && tenantId !== 0) map[k] = `分站 #${tenantId}`;
@@ -4363,6 +4363,12 @@ const defaultSettingsDefs = [
   { key: 'site_name', value: '大海团队', name: '站点名称', description: '显示在站点各处的名称（分站可自定义）', type: 'text' },
   { key: 'site_description', value: '', name: '站点描述', description: '用于 SEO 与页面描述（仅主站对全局生效，分站自用）', type: 'textarea' },
   { key: 'site_logo', value: '', name: '站点 Logo', description: '顶部导航显示的 Logo（建议使用透明 PNG/JPG）', type: 'image' },
+  { key: 'site_favicon', value: '', name: '站点 Favicon', description: '浏览器标签图标（建议使用 PNG）', type: 'image' },
+  { key: 'seo_title_suffix', value: ' - 大海团队', name: 'SEO 标题后缀', description: '将附加到页面标题后的统一后缀（分站可自定义）', type: 'text' },
+  { key: 'seo_keywords', value: '', name: 'SEO 关键词', description: '逗号分隔的关键词列表（分站可自定义）', type: 'text' },
+  { key: 'seo_meta_image', value: '', name: 'SEO 分享图', description: '默认 Open Graph/Twitter 分享图 URL（分站可自定义）', type: 'image' },
+  { key: 'seo_indexable', value: 'true', name: '允许索引', description: '是否允许搜索引擎索引本站（分站可自定义）', type: 'boolean' },
+  { key: 'seo_sitemap_enabled', value: 'true', name: '启用站点地图', description: '是否启用 sitemap.xml 输出（分站可自定义）', type: 'boolean' },
   { key: 'new_user_points', value: '100', name: '新用户初始积分', description: '新注册用户默认获得的积分数量', type: 'number' },
   { key: 'initial_virtual_currency', value: '0', name: '新用户初始虚拟分', description: '新注册用户默认获得的虚拟分数量', type: 'number' },
   { key: 'new_user_free_posts', value: '0', name: '新用户免费发布次数', description: '新注册用户可免费发布的次数', type: 'number' },
@@ -4436,7 +4442,7 @@ app.post('/api/admin/settings', async (c) => {
     }
     const updatesRaw = Array.isArray(body?.updates) ? body.updates : body; // support old shape: array
     if (!Array.isArray(updatesRaw)) return c.json({ error: 'invalid' }, 400);
-    const ALLOWED_KEYS = new Set(['site_name', 'site_logo']);
+    const ALLOWED_KEYS = new Set(['site_name', 'site_logo', 'site_description', 'site_favicon', 'seo_title_suffix', 'seo_keywords', 'seo_meta_image', 'seo_indexable', 'seo_sitemap_enabled']);
     const updates = isSuper ? updatesRaw : updatesRaw.filter(u => ALLOWED_KEYS.has(String(u.key)));
     const db = await getTursoClientForTenant(targetTenantId);
     for (const u of updates) {
@@ -4471,7 +4477,7 @@ app.delete('/api/admin/settings/:key', async (c) => {
     const targetTenantId = qTenantIdRaw != null && qTenantIdRaw !== '' ? Number(qTenantIdRaw) : 0;
     const isSuper = await isSuperAdminUser(userId);
     if (!isSuper) {
-      const ALLOWED_KEYS = new Set(['site_name', 'site_logo']);
+      const ALLOWED_KEYS = new Set(['site_name', 'site_logo', 'site_description', 'site_favicon', 'seo_title_suffix', 'seo_keywords', 'seo_meta_image', 'seo_indexable', 'seo_sitemap_enabled']);
       const allowed = await canManageTenant(userId, targetTenantId);
       if (!allowed || targetTenantId === 0 || !ALLOWED_KEYS.has(String(key))) return c.json({ error: 'forbidden' }, 403);
     }
@@ -5277,5 +5283,64 @@ app.get('/api/tenants/:id', async (c) => {
     });
   } catch (e) {
     return c.json({ error: 'failed' }, 500);
+  }
+});
+
+// SEO: robots.txt per-tenant
+app.get('/robots.txt', async (c) => {
+  try {
+    const defaultDb = await getTursoClientForTenant(0);
+    const host = (c.get('host') || c.req.header('host') || '').split(':')[0];
+    const tenantId = await resolveTenantId(defaultDb, host);
+    const db = await getTursoClientForTenant(tenantId);
+    const rows = await db.select().from(appSettings).where(eq(appSettings.tenantId, tenantId));
+    const map = {};
+    for (const r of rows || []) map[r.key] = r.value;
+    const indexable = String(map['seo_indexable'] ?? 'true') === 'true';
+    const lines = [];
+    if (!indexable) {
+      lines.push('User-agent: *');
+      lines.push('Disallow: /');
+    } else {
+      lines.push('User-agent: *');
+      lines.push('Allow: /');
+      lines.push(`Sitemap: https://${host}/sitemap.xml`);
+    }
+    c.header('Content-Type', 'text/plain; charset=utf-8');
+    return c.body(lines.join('\n'));
+  } catch (e) {
+    c.header('Content-Type', 'text/plain; charset=utf-8');
+    return c.body('User-agent: *\nAllow: /');
+  }
+});
+
+// SEO: sitemap.xml per-tenant
+app.get('/sitemap.xml', async (c) => {
+  try {
+    const defaultDb = await getTursoClientForTenant(0);
+    const host = (c.get('host') || c.req.header('host') || '').split(':')[0];
+    const tenantId = await resolveTenantId(defaultDb, host);
+    const db = await getTursoClientForTenant(tenantId);
+    const rows = await db.select().from(appSettings).where(eq(appSettings.tenantId, tenantId));
+    const map = {};
+    for (const r of rows || []) map[r.key] = r.value;
+    const enabled = String(map['seo_sitemap_enabled'] ?? 'true') === 'true';
+    if (!enabled) return c.text('Sitemap disabled', 404);
+
+    const baseUrl = `https://${host}`;
+    const urlset = [];
+    const now = new Date().toISOString();
+    const pushUrl = (loc, changefreq = 'weekly', priority = '0.6') => {
+      urlset.push(`<url><loc>${baseUrl}${loc}</loc><lastmod>${now}</lastmod><changefreq>${changefreq}</changefreq><priority>${priority}</priority></url>`);
+    };
+    pushUrl('/');
+    pushUrl('/games');
+    pushUrl('/social', 'daily', '0.8');
+
+    const xml = `<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">${urlset.join('')}</urlset>`;
+    c.header('Content-Type', 'application/xml; charset=utf-8');
+    return c.body(xml);
+  } catch (e) {
+    return c.text('Sitemap generation failed', 500);
   }
 });
