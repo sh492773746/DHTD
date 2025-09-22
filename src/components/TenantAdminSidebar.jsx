@@ -14,6 +14,7 @@ const TenantAdminSidebar = ({ onLinkClick }) => {
     { to: '/tenant-admin', icon: Home, label: '仪表盘' },
     { to: '/tenant-admin/page-content', icon: LayoutTemplate, label: '页面内容管理' },
     { to: '/tenant-admin/site-settings', icon: Brush, label: '站点设置' },
+    { to: '/tenant-admin/seo', icon: LayoutTemplate, label: 'SEO 建议' },
   ];
 
   const handleNavLinkClick = () => {

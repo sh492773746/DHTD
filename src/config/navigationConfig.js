@@ -37,6 +37,7 @@ export const adminNavItems = [
     items: [
       { to: '/admin/site-settings', label: '主站设置', icon: Settings },
       { to: '/admin/page-content', label: '页面内容', icon: Palette },
+      { to: '/admin/seo', label: 'SEO 建议', icon: Wand2 },
     ],
   },
   {
