@@ -4602,8 +4602,9 @@ app.put('/api/shared/posts/:id', async (c) => {
     const rows = await db.select().from(sharedPosts).where(eq(sharedPosts.id, id)).limit(1);
     const post = rows?.[0];
     if (!post) return c.json({ error: 'not-found' }, 404);
-    if (post.authorId !== userId) return c.json({ error: 'forbidden' }, 403);
-    if (post.updatedAt && post.updatedAt !== post.createdAt) return c.json({ error: 'already-edited' }, 400);
+    const isAdmin = await isSuperAdminUser(userId);
+    if (!isAdmin && post.authorId !== userId) return c.json({ error: 'forbidden' }, 403);
+    if (!isAdmin && post.updatedAt && post.updatedAt !== post.createdAt) return c.json({ error: 'already-edited' }, 400);
     const now = new Date().toISOString();
     const newImages = Array.isArray(images) ? JSON.stringify(images) : (typeof post.images === 'string' ? post.images : JSON.stringify([]));
     await db.update(sharedPosts).set({ content: String(content || post.content), images: newImages, updatedAt: now }).where(eq(sharedPosts.id, id));

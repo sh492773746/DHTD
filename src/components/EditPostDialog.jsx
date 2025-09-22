@@ -50,9 +50,7 @@ const EditPostDialog = ({ isOpen, setIsOpen, post, onPostUpdated }) => {
         }
         setIsSaving(true);
         try {
-            // shared 帖子没有 tenantId/tenant_id 字段；tenantId=0 仍然是租户帖
-            const isShared = (post.tenant_id === undefined && post.tenantId === undefined);
-            const url = isShared ? `/api/shared/posts/${post.id}` : `/api/posts/${post.id}`;
+            const url = `/api/shared/posts/${post.id}`;
             const res = await fetch(url, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
