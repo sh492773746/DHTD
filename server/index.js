@@ -3283,6 +3283,21 @@ app.get('/api/shared/posts', async (c) => {
     // fallback source: base profiles for missing fields
     const baseAll = authorIds.length ? await db.select().from(profiles).where(inArray(profiles.id, authorIds)) : [];
     const baseMap = new Map((baseAll || []).map(b => [b.id, { id: b.id, username: b.username, avatar_url: b.avatarUrl }]));
+    // persist enrichments back to shared_profiles where fields are missing
+    try {
+      for (const a of rereadAuthors || []) {
+        const base = baseMap.get(a.id);
+        if (!base) continue;
+        const needUsername = !a.username && base.username;
+        const needAvatar = !a.avatarUrl && base.avatar_url;
+        if (needUsername || needAvatar) {
+          const upd = {};
+          if (needUsername) upd.username = base.username;
+          if (needAvatar) upd.avatarUrl = base.avatar_url;
+          try { await db.update(sharedProfiles).set(upd).where(eq(sharedProfiles.id, a.id)); } catch {}
+        }
+      }
+    } catch {}
      // counts
      const withCounts = [];
      const userId = c.get('userId');

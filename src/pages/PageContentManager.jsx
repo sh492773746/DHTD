@@ -44,7 +44,7 @@ async function fetchSectionItems(token, tenantId, page, sectionId) {
             content: parsed,
         };
     });
-}
+    }
 
 const fetchPageContent = async (token, tenantId, page, sectionIds) => {
     if (tenantId === undefined || !page || !Array.isArray(sectionIds) || sectionIds.length === 0) return {};
@@ -66,7 +66,7 @@ const fetchGameCategories = async (token) => {
 };
 
 const fetchTenantInfo = async (_token, _tenantId) => {
-    return null;
+        return null;
 };
 
 const PageContentManager = () => {
@@ -136,6 +136,8 @@ const PageContentManager = () => {
         queryClient.invalidateQueries({ queryKey: ['pageContent', managedTenantId, activePage, sectionsKey, !!token] });
         queryClient.invalidateQueries({ queryKey: ['dashboardContent', managedTenantId] });
         queryClient.invalidateQueries({ queryKey: ['gamesData', managedTenantId] });
+        // ensure social pinned ads refresh on Social page
+        queryClient.invalidateQueries({ queryKey: ['pageContent', 'social', 'pinned_ads'] });
     }, [queryClient, managedTenantId, activePage, sectionsKey, token]);
 
     const handleFormSubmit = async (values, itemId) => {
@@ -154,7 +156,7 @@ const PageContentManager = () => {
         try {
             if (itemId) {
                 await bffJson(`/api/admin/page-content/${itemId}`, { token, method: 'PUT', body: { ...contentData, id: itemId } });
-            } else {
+        } else {
                 await bffJson('/api/admin/page-content', { token, method: 'POST', body: contentData });
             }
             toast({ title: '保存成功', description: '内容已更新' });
@@ -191,9 +193,9 @@ const PageContentManager = () => {
             for (const itemContent of importedData) {
                 currentMaxPosition += 1;
                 const body = {
-                    page,
-                    section,
-                    content: itemContent,
+            page,
+            section,
+            content: itemContent,
                     position: currentMaxPosition,
                     tenant_id: managedTenantId,
                 };
