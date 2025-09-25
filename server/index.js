@@ -2410,7 +2410,14 @@ app.post('/api/admin/seed-shared', async (c) => {
     // ensure author profile
     const now = new Date().toISOString();
     const prof = await db.select().from(sharedProfiles).where(eq(sharedProfiles.id, userId)).limit(1);
-    if (!prof || prof.length === 0) await db.insert(sharedProfiles).values({ id: userId, username: '平台用户', createdAt: now });
+    if (!prof || prof.length === 0) {
+      let username = '平台用户';
+      try {
+        const base = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
+        if (base && base[0] && base[0].username) username = base[0].username;
+      } catch {}
+      await db.insert(sharedProfiles).values({ id: userId, username, createdAt: now });
+    }
 
     const exist = await db.select().from(sharedPosts).limit(1);
     if (!exist || exist.length === 0) {
@@ -3342,7 +3349,14 @@ app.post('/api/shared/posts', async (c) => {
     const now = new Date().toISOString();
     // ensure profile exists
     const prof = await db.select().from(sharedProfiles).where(eq(sharedProfiles.id, userId)).limit(1);
-    if (!prof || prof.length === 0) await db.insert(sharedProfiles).values({ id: userId, username: '用户', createdAt: now });
+    if (!prof || prof.length === 0) {
+      let username = '用户';
+      try {
+        const base = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
+        if (base && base[0] && base[0].username) username = base[0].username;
+      } catch {}
+      await db.insert(sharedProfiles).values({ id: userId, username, createdAt: now });
+    }
     await db.insert(sharedPosts).values({ authorId: userId, content, images: JSON.stringify(images), isPinned: 0, status: 'approved', createdAt: now, updatedAt: now });
     const lastRows = await db.select({ id: sharedPosts.id }).from(sharedPosts).orderBy(desc(sharedPosts.id)).limit(1);
     const id = Number(lastRows?.[0]?.id || 0);
@@ -3395,7 +3409,12 @@ app.post('/api/shared/comments', async (c) => {
     await db.insert(sharedComments).values({ postId, userId, content, createdAt: now });
     const prof = await db.select().from(sharedProfiles).where(eq(sharedProfiles.id, userId)).limit(1);
     if (!prof || prof.length === 0) {
-      await db.insert(sharedProfiles).values({ id: userId, username: '用户', createdAt: now });
+      let username = '用户';
+      try {
+        const base = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
+        if (base && base[0] && base[0].username) username = base[0].username;
+      } catch {}
+      await db.insert(sharedProfiles).values({ id: userId, username, createdAt: now });
     }
     try { await ensureUid(getGlobalDb(), profiles, profiles.id, userId); } catch {}
     const author = (await db.select().from(sharedProfiles).where(eq(sharedProfiles.id, userId)).limit(1))?.[0] || null;

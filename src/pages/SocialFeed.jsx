@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
@@ -16,6 +16,7 @@ import { LogIn } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useWindowVirtualizer } from '@tanstack/react-virtual';
+import { useQueryClient } from '@tanstack/react-query';
 
 const POSTS_PER_PAGE = 20;
 
@@ -47,8 +48,17 @@ const SocialFeed = () => {
     const { isLoading: isTenantLoading } = useTenant();
     const [activeTab, setActiveTab] = useState('social');
     const { ref, inView } = useInView({ threshold: 0.5 });
+    const queryClient = useQueryClient();
     
     const { data: pinnedAds, isLoading: isPinnedAdsLoading } = usePageContent('social', 'pinned_ads');
+    const [adIndex, setAdIndex] = useState(0);
+    useEffect(() => {
+      if (!pinnedAds || pinnedAds.length <= 1) return;
+      const t = setInterval(() => {
+        setAdIndex((i) => (i + 1) % pinnedAds.length);
+      }, 4000);
+      return () => clearInterval(t);
+    }, [pinnedAds]);
     
     const fetchPosts = async ({ pageParam = 0 }) => {
         const url = `/api/shared/posts?page=${pageParam}&size=${POSTS_PER_PAGE}`;
@@ -61,7 +71,8 @@ const SocialFeed = () => {
           let image_urls = [];
           if (Array.isArray(r.images)) image_urls = r.images;
           else if (typeof r.images === 'string') { try { image_urls = JSON.parse(r.images || '[]'); } catch { image_urls = []; } }
-          return { ...r, image_urls };
+          const is_pinned = (r.is_pinned !== undefined) ? r.is_pinned : (r.isPinned ? Number(r.isPinned) : 0);
+          return { ...r, image_urls, is_pinned };
         });
         return {
             data: normalized,
@@ -85,34 +96,36 @@ const SocialFeed = () => {
         getNextPageParam: (lastPage) => lastPage.nextPage,
         enabled: isInitialized && !isTenantLoading,
     });
-
-    React.useEffect(() => {
+ 
+    useEffect(() => {
         if (inView && hasNextPage && !isFetching) {
             fetchNextPage();
         }
     }, [inView, hasNextPage, isFetching, fetchNextPage]);
-    
+     
     const handlePostUpdated = () => {
+        // 强制重置分页，确保置顶帖子回到顶部
+        queryClient.removeQueries({ queryKey: ['sharedPosts'] });
         refetch();
     };
-
+ 
     const handleDeletePost = () => {
         refetch();
     };
     
     const allPosts = useMemo(() => data?.pages.flatMap(page => page.data) ?? [], [data]);
-
+ 
     const rowVirtualizer = useWindowVirtualizer({
         count: allPosts.length,
         estimateSize: () => 360,
         overscan: 8,
     });
     const virtualItems = rowVirtualizer.getVirtualItems();
-
+ 
     const renderSkeletons = () => (
         Array.from({ length: 3 }).map((_, index) => <PostSkeleton key={index} />)
     );
-
+ 
     const renderFeedContent = () => {
         if (status === 'pending' || (isFetching && !isFetchingNextPage)) {
             return renderSkeletons();
@@ -190,27 +203,47 @@ const SocialFeed = () => {
                 </div>
 
                 <div className="pt-4 space-y-4 px-2 md:px-0">
-                   {isPinnedAdsLoading ? <Skeleton className="w-full h-[120px] rounded-lg" /> :
-                     pinnedAds && pinnedAds.length > 0 && (
-                        <div className="space-y-2 mb-4">
-                            {pinnedAds.map((ad, index) => (
-                                <NeonAd 
-                                    key={index} 
-                                    title={ad.title} 
-                                    description={ad.description} 
-                                    link={ad.link_url} 
-                                    imageUrl={ad.background_image_url} 
-                                />
-                            ))}
+                   {isPinnedAdsLoading ? (
+                      <Skeleton className="w-full h-[120px] rounded-lg" />
+                   ) : (pinnedAds && pinnedAds.length > 0 && (
+                      <div className="relative w-full h-[120px] overflow-hidden rounded-lg mb-4">
+                        <div
+                          className="flex w-full h-full transition-transform duration-500"
+                          style={{ transform: `translateX(-${(adIndex % (pinnedAds.length || 1)) * 100}%)` }}
+                        >
+                          {pinnedAds.map((ad, idx) => (
+                            <a
+                              key={idx}
+                              href={ad.link_url || '#'}
+                              target={ad.link_url ? '_blank' : undefined}
+                              rel={ad.link_url ? 'noopener noreferrer' : undefined}
+                              className="w-full h-full flex-none block relative"
+                              style={{ minWidth: '100%' }}
+                            >
+                              <img src={ad.background_image_url} alt={ad.title} className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-black/30 flex items-center px-4">
+                                <div>
+                                  <div className="text-white font-semibold text-sm">{ad.title}</div>
+                                  <div className="text-white/80 text-xs mt-1 line-clamp-2">{ad.description}</div>
+                                </div>
+                              </div>
+                            </a>
+                          ))}
                         </div>
-                   )}
-                   {renderFeedContent()}
-                </div>
-            </div>
-            
-            <FloatingCreatePostButton onPostCreated={refetch} />
-        </>
-    );
-};
-
-export default SocialFeed;
+                        <div className="absolute bottom-2 right-2 flex gap-1">
+                          {pinnedAds.map((_, i) => (
+                            <span key={i} className={`w-2 h-2 rounded-full ${adIndex % pinnedAds.length===i?'bg-white':'bg-white/40'}`} />
+                          ))}
+                        </div>
+                      </div>
+                   ))}
+                    {renderFeedContent()}
+                 </div>
+             </div>
+             
+             <FloatingCreatePostButton onPostCreated={refetch} />
+         </>
+     );
+ };
+ 
+ export default SocialFeed;
