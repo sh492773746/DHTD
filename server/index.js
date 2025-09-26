@@ -3323,59 +3323,30 @@ app.post('/api/shared/posts/:id/pin', async (c) => {
 });
 app.post('/api/posts', async (c) => {
   try {
-    const { mode, tenantId, tenantDb, defaultDb } = await getForumModeForTenant(c.get('host').split(':')[0]);
+    const { tenantId, tenantDb, defaultDb } = await getForumModeForTenant(c.get('host').split(':')[0]);
     const userId = c.get('userId');
     if (!userId) return c.json({ error: 'unauthorized' }, 401);
     const body = await c.req.json();
     const content = String(body?.content || '');
     const images = Array.isArray(body?.images) ? body.images : [];
     const useFreePost = Boolean(body?.useFreePost);
-    const isAd = body?.isAd ? 1 : 0;
+    const zone = String(body?.zone || '').toLowerCase();
+    const isAd = zone === 'ads' ? 1 : 0;
     const now = new Date().toISOString();
 
-    if (mode === 'shared') {
-      await ensureSharedForumSchema();
-      const existing = await defaultDb.select().from(sharedProfiles).where(eq(sharedProfiles.id, userId)).limit(1);
-      if (!existing || existing.length === 0) {
-        let username = `用户${String(userId).slice(-4)}`;
-        try {
-          const base = await defaultDb.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
-          if (base && base[0]?.username) username = base[0].username;
-        } catch {}
-        await defaultDb.insert(sharedProfiles).values({ id: userId, username, createdAt: now });
-      }
-      await defaultDb.insert(sharedPosts).values({
-        authorId: userId,
-        content,
-        images: JSON.stringify(images),
-        isPinned: 0,
-        status: 'approved',
-        createdAt: now,
-        updatedAt: now,
-        isAd,
-      });
-      const lastRows = await defaultDb.select({ id: sharedPosts.id }).from(sharedPosts).orderBy(desc(sharedPosts.id)).limit(1);
-      const id = Number(lastRows?.[0]?.id || 0);
-      const author = (await defaultDb.select().from(sharedProfiles).where(eq(sharedProfiles.id, userId)).limit(1))?.[0] || null;
-      return c.json({
-        id,
-        authorId: userId,
-        content,
-        images: JSON.stringify(images),
-        isPinned: 0,
-        status: 'approved',
-        createdAt: now,
-        updatedAt: now,
-        isAd,
-        author: author ? { id: author.id, username: author.username, avatar_url: author.avatarUrl } : null,
-        likesCount: 0,
-        commentsCount: 0,
-      });
+    await ensureSharedForumSchema();
+    const existingShared = await defaultDb.select().from(sharedProfiles).where(eq(sharedProfiles.id, userId)).limit(1);
+    if (!existingShared || existingShared.length === 0) {
+      let username = `用户${String(userId).slice(-4)}`;
+      try {
+        const base = await defaultDb.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
+        if (base && base[0]?.username) username = base[0].username;
+      } catch {}
+      await defaultDb.insert(sharedProfiles).values({ id: userId, username, createdAt: now });
     }
 
-    const tables = getTenantTables();
-    const existing = await tenantDb.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
-    if (!existing || existing.length === 0) {
+    const existingTenantProfile = await tenantDb.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
+    if (!existingTenantProfile || existingTenantProfile.length === 0) {
       await tenantDb.insert(profiles).values({ id: userId, username: `用户${String(userId).slice(-4)}`, tenantId, points: 0, createdAt: now });
     }
     await ensureUid(tenantDb, profiles, profiles.id, userId);
@@ -3396,8 +3367,7 @@ app.post('/api/posts', async (c) => {
       }
     } catch {}
 
-    await tenantDb.insert(tables.posts).values({
-      tenantId,
+    await defaultDb.insert(sharedPosts).values({
       authorId: userId,
       content,
       images: JSON.stringify(images),
@@ -3407,12 +3377,11 @@ app.post('/api/posts', async (c) => {
       createdAt: now,
       updatedAt: now,
     });
-    const lastRows = await tenantDb.select({ id: tables.posts.id }).from(tables.posts).orderBy(desc(tables.posts.id)).limit(1);
+    const lastRows = await defaultDb.select({ id: sharedPosts.id }).from(sharedPosts).orderBy(desc(sharedPosts.id)).limit(1);
     const id = Number(lastRows?.[0]?.id || 0);
-    const author = (await tenantDb.select().from(profiles).where(eq(profiles.id, userId)).limit(1))?.[0] || null;
+    const author = (await defaultDb.select().from(sharedProfiles).where(eq(sharedProfiles.id, userId)).limit(1))?.[0] || null;
     return c.json({
       id,
-      tenantId,
       authorId: userId,
       content,
       images: JSON.stringify(images),

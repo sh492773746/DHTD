@@ -178,8 +178,8 @@ const CreatePost = ({ isOpen, setIsOpen, onPostCreated, tenantId }) => {
             // 1) upload images via resumable BFF
             const imageUrls = await uploadImagesViaBff();
 
-            const endpoint = '/api/shared/posts';
-            const body = { content: content.trim(), images: imageUrls, isAd, useFreePost };
+            const endpoint = '/api/posts';
+            const body = { content: content.trim(), images: imageUrls, isAd, useFreePost, zone: isAd ? 'ads' : 'social' };
 
             const res = await fetch(endpoint, {
                 method: 'POST',
