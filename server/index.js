@@ -4436,21 +4436,11 @@ async function readSettingsMap() {
   return map;
 }
 
-async function readTenantSettings(tenantId) {
-  const db = await getTursoClientForTenant(tenantId);
-  try { await ensureDefaultSettings(db, tenantId); } catch {}
-  const rows = await db.select().from(appSettings).where(eq(appSettings.tenantId, tenantId));
-  const map = new Map((rows || []).map(r => [r.key, r.value]));
-  return map;
-}
-
 async function getForumModeForTenant(host) {
   const defaultDb = await getTursoClientForTenant(0);
   const tenantId = await resolveTenantId(defaultDb, host);
   const tenantDb = await getTursoClientForTenant(tenantId);
-  const settings = await readTenantSettings(tenantId);
-  const mode = String(settings.get('social_forum_mode') || (tenantId === 0 ? 'shared' : 'isolated')).toLowerCase();
-  return { mode, tenantId, tenantDb, defaultDb };
+  return { mode: 'shared', tenantId, tenantDb, defaultDb };
 }
 
 async function buildAuthorProfiles(db, authorIds) {

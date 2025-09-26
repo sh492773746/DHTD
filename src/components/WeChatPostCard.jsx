@@ -21,7 +21,7 @@ import PostContent from '@/components/wechat-post-card/PostContent';
 import PostImageGrid from '@/components/wechat-post-card/PostImageGrid';
 import PostFooter from '@/components/wechat-post-card/PostFooter';
 
-const WeChatPostCard = ({ post, onPostUpdated, onDeletePost, forumMode = 'shared' }) => {
+const WeChatPostCard = ({ post, onPostUpdated, onDeletePost }) => {
   const { user, isAdmin, isSuperAdmin, session, siteSettings } = useAuth();
   const { toast } = useToast();
   
@@ -34,7 +34,6 @@ const WeChatPostCard = ({ post, onPostUpdated, onDeletePost, forumMode = 'shared
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [currentLightboxImage, setCurrentLightboxImage] = React.useState(null);
 
-  const effectiveForumMode = forumMode || String(siteSettings?.social_forum_mode || '').toLowerCase() || 'shared';
   const isAuthor = user && post.author?.id === user.id;
   // Forum unified to shared mode; only super admin has admin actions
   const canAdmin = !!isSuperAdmin;
@@ -43,9 +42,7 @@ const WeChatPostCard = ({ post, onPostUpdated, onDeletePost, forumMode = 'shared
   React.useEffect(() => {
     const load = async () => {
       try {
-        const endpoint = effectiveForumMode === 'shared'
-          ? `/api/shared/comments?postId=${encodeURIComponent(post.id)}`
-          : `/api/comments?postId=${encodeURIComponent(post.id)}`;
+        const endpoint = `/api/shared/comments?postId=${encodeURIComponent(post.id)}`;
         const res = await fetch(endpoint);
         if (!res.ok) return;
         const data = await res.json();
@@ -76,7 +73,7 @@ const WeChatPostCard = ({ post, onPostUpdated, onDeletePost, forumMode = 'shared
     setLikesCount(prev => newHasLiked ? prev + 1 : Math.max(0, prev - 1));
 
     try {
-      const likeUrl = effectiveForumMode === 'shared' ? '/api/shared/likes' : '/api/likes';
+      const likeUrl = '/api/shared/likes';
       const method = newHasLiked ? 'POST' : 'DELETE';
       const res = await fetch(likeUrl, {
         method,
@@ -101,7 +98,7 @@ const WeChatPostCard = ({ post, onPostUpdated, onDeletePost, forumMode = 'shared
   
   const handleDeletePost = async () => {
     try {
-      const url = effectiveForumMode === 'shared' ? `/api/shared/posts/${post.id}` : `/api/posts/${post.id}`;
+      const url = `/api/shared/posts/${post.id}`;
       const res = await fetch(url, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error('failed');
       toast({ title: "删除成功", description: "帖子已删除。" });
@@ -114,7 +111,7 @@ const WeChatPostCard = ({ post, onPostUpdated, onDeletePost, forumMode = 'shared
   
   const handleTogglePin = async () => {
     try {
-      const url = effectiveForumMode === 'shared' ? `/api/shared/posts/${post.id}/pin` : `/api/posts/${post.id}/pin`;
+      const url = `/api/shared/posts/${post.id}/pin`;
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },

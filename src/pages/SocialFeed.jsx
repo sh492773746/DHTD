@@ -60,16 +60,9 @@ const SocialFeed = () => {
       return () => clearInterval(t);
     }, [pinnedAds]);
     
-    const forumMode = String(siteSettings?.social_forum_mode || '').toLowerCase();
-
     const fetchPosts = async ({ pageParam = 0 }) => {
-        const isAdsTab = activeTab === 'ads';
-        const sharedMode = forumMode === 'shared';
-        const baseUrl = sharedMode ? '/api/shared/posts' : '/api/posts';
+        const baseUrl = '/api/shared/posts';
         const query = new URLSearchParams({ page: String(pageParam), size: String(POSTS_PER_PAGE) });
-        if (!sharedMode) {
-            query.set('tab', isAdsTab ? 'ads' : 'social');
-        }
         const url = `${baseUrl}?${query.toString()}`;
         const token = session?.access_token || null;
         const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
@@ -81,7 +74,7 @@ const SocialFeed = () => {
           if (Array.isArray(r.images)) image_urls = r.images;
           else if (typeof r.images === 'string') { try { image_urls = JSON.parse(r.images || '[]'); } catch { image_urls = []; } }
           const is_pinned = (r.is_pinned !== undefined) ? r.is_pinned : (r.isPinned ? Number(r.isPinned) : 0);
-          const is_ad = sharedMode ? Boolean(r.is_ad || r.isAd) : isAdsTab;
+          const is_ad = Boolean(r.is_ad || r.isAd);
           return { ...r, image_urls, is_pinned, is_ad };
         });
         return {
@@ -100,7 +93,7 @@ const SocialFeed = () => {
         status,
         refetch
     } = useInfiniteQuery({
-        queryKey: ['socialPosts', forumMode, activeTab, !!user],
+        queryKey: ['socialPosts', activeTab, !!user],
         queryFn: fetchPosts,
         initialPageParam: 0,
         getNextPageParam: (lastPage) => lastPage.nextPage,
@@ -123,7 +116,10 @@ const SocialFeed = () => {
         refetch();
     };
     
-    const allPosts = useMemo(() => data?.pages.flatMap(page => page.data) ?? [], [data]);
+    const allPosts = useMemo(() => {
+        const list = data?.pages.flatMap(page => page.data) ?? [];
+        return list.filter(post => (activeTab === 'ads') ? post.is_ad : !post.is_ad);
+    }, [data, activeTab]);
  
     const rowVirtualizer = useWindowVirtualizer({
         count: allPosts.length,
@@ -174,7 +170,7 @@ const SocialFeed = () => {
                                         transform: `translateY(${v.start}px)`,
                                     }}
                                 >
-                                    <WeChatPostCard key={post.id} post={post} onPostUpdated={handlePostUpdated} onDeletePost={handleDeletePost} forumMode={forumMode} />
+                                    <WeChatPostCard key={post.id} post={post} onPostUpdated={handlePostUpdated} onDeletePost={handleDeletePost} forumMode="shared" />
                                 </div>
                             );
                         })}

@@ -178,8 +178,7 @@ const CreatePost = ({ isOpen, setIsOpen, onPostCreated, tenantId }) => {
             // 1) upload images via resumable BFF
             const imageUrls = await uploadImagesViaBff();
 
-            const forumMode = String(siteSettings?.social_forum_mode || '').toLowerCase();
-            const endpoint = forumMode === 'shared' ? '/api/shared/posts' : '/api/posts';
+            const endpoint = '/api/shared/posts';
             const body = { content: content.trim(), images: imageUrls, isAd, useFreePost };
 
             const res = await fetch(endpoint, {
