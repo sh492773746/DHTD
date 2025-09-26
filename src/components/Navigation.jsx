@@ -120,11 +120,17 @@ const Navigation = () => {
     <header className="bg-background/80 backdrop-blur-lg border-b border-border shadow-sm sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-14">
-          <Link to="/" className="flex items-center text-2xl font-bold text-foreground">
-            { (siteSettings.site_logo || siteSettings.logo_url) && (
-              <img src={siteSettings.site_logo || siteSettings.logo_url} alt={siteSettings.site_name || 'Site Logo'} className="h-8 w-auto object-contain mr-2" />
+          <Link to="/" className="flex min-w-0 items-center gap-2 text-2xl font-bold text-foreground">
+            {(siteSettings.site_logo || siteSettings.logo_url) && (
+              <div className="flex-shrink-0 h-8 w-auto">
+                <img
+                  src={siteSettings.site_logo || siteSettings.logo_url}
+                  alt={siteSettings.site_name || 'Site Logo'}
+                  className="h-8 w-auto object-contain"
+                />
+              </div>
             )}
-            <span>{siteSettings.site_name || '大海'}</span>
+            <span className="truncate whitespace-nowrap text-lg sm:text-2xl">{siteSettings.site_name || '大海'}</span>
           </Link>
 
           <nav className="hidden md:flex items-center space-x-6">
