@@ -6,7 +6,6 @@ export function cn(...inputs) {
 	return twMerge(clsx(inputs));
 }
 
-const ROOT_DOMAIN = (import.meta.env?.NEXT_PUBLIC_ROOT_DOMAIN || '').toLowerCase();
 const TENANT_RESOLVE_TIMEOUT_MS = Number(import.meta.env?.VITE_TENANT_RESOLVE_TIMEOUT_MS || 2500);
 
 export const getTenantIdByHostname = async (hostname) => {
@@ -14,11 +13,6 @@ export const getTenantIdByHostname = async (hostname) => {
 	try {
 		if (!normalizedHost || normalizedHost === 'localhost' || normalizedHost.startsWith('localhost:') || normalizedHost === '127.0.0.1') {
 			return 0;
-		}
-		if (ROOT_DOMAIN) {
-			if (normalizedHost === ROOT_DOMAIN || normalizedHost.endsWith(`.${ROOT_DOMAIN}`)) {
-				return 0;
-			}
 		}
 
 		const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
