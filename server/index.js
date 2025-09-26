@@ -1221,9 +1221,18 @@ app.get('/api/posts', async (c) => {
     if (mode === 'shared') {
       await ensureSharedForumSchema();
       const tables = getSharedTables();
-      const rows = await defaultDb
+      let query = defaultDb
         .select()
-        .from(tables.posts)
+        .from(tables.posts);
+
+      const zone = String(c.req.query('zone') || '').toLowerCase();
+      if (zone === 'ads') {
+        query = query.where(eq(tables.posts.isAd, 1));
+      } else if (zone === 'social') {
+        query = query.where(eq(tables.posts.isAd, 0));
+      }
+
+      const rows = await query
         .orderBy(desc(tables.posts.isPinned), desc(tables.posts.createdAt))
         .limit(size)
         .offset(page * size);
@@ -1287,10 +1296,13 @@ app.get('/api/shared/posts', async (c) => {
     const userId = c.get('userId');
     const page = Number(c.req.query('page') || 0);
     const size = Math.min(Number(c.req.query('size') || 10), 50);
+    const zone = String(c.req.query('zone') || '').toLowerCase();
 
-    const rows = await db
-      .select()
-      .from(tables.posts)
+    let query = db.select().from(tables.posts);
+    if (zone === 'ads') query = query.where(eq(tables.posts.isAd, 1));
+    if (zone === 'social') query = query.where(eq(tables.posts.isAd, 0));
+
+    const rows = await query
       .orderBy(desc(tables.posts.isPinned), desc(tables.posts.createdAt))
       .limit(size)
       .offset(page * size);
@@ -3384,7 +3396,7 @@ app.post('/api/posts', async (c) => {
       }
     } catch {}
 
-    await defaultDb.insert(sharedPosts).values({
+    const insertResult = await defaultDb.insert(sharedPosts).values({
       authorId: userId,
       content,
       images: JSON.stringify(images),
@@ -3393,12 +3405,13 @@ app.post('/api/posts', async (c) => {
       status: 'approved',
       createdAt: now,
       updatedAt: now,
-    });
-    const lastRows = await defaultDb.select({ id: sharedPosts.id }).from(sharedPosts).orderBy(desc(sharedPosts.id)).limit(1);
-    const id = Number(lastRows?.[0]?.id || 0);
+    }).returning({ id: sharedPosts.id });
+    const insertedId = Number(insertResult?.[0]?.id);
+    const newId = Number.isFinite(insertedId) && insertedId > 0 ? insertedId : Number((await defaultDb.select({ id: sharedPosts.id }).from(sharedPosts).orderBy(desc(sharedPosts.id)).limit(1))?.[0]?.id || 0);
+
     const author = (await defaultDb.select().from(sharedProfiles).where(eq(sharedProfiles.id, userId)).limit(1))?.[0] || null;
     return c.json({
-      id,
+      id: newId,
       authorId: userId,
       content,
       images: JSON.stringify(images),
