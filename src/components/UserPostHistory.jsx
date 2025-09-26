@@ -26,7 +26,14 @@ const mapPost = (p) => ({
 
 const fetchUserPosts = async (userId, isAd) => {
   if (!userId) return [];
-  const url = `/api/shared/posts?authorId=${encodeURIComponent(userId)}&page=0&size=50`;
+  const params = new URLSearchParams({
+    authorId: userId,
+    useShared: '1',
+    zone: isAd ? 'ads' : 'social',
+    page: '0',
+    size: '50'
+  });
+  const url = `/api/posts?${params.toString()}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error('Failed to load user posts');
   const data = await res.json();

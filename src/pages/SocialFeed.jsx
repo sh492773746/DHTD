@@ -20,6 +20,13 @@ import { useQueryClient } from '@tanstack/react-query';
 
 const POSTS_PER_PAGE = 20;
 
+const buildFeedUrl = ({ page, size, tab }) => {
+    const params = new URLSearchParams({ page: String(page), size: String(size) });
+    if (tab === 'ads') params.set('zone', 'ads');
+    if (tab === 'social') params.set('zone', 'social');
+    return `/api/posts?${params.toString()}`;
+};
+
 const NotLoggedInPrompt = () => {
     const navigate = useNavigate();
     return (
@@ -61,9 +68,7 @@ const SocialFeed = () => {
     }, [pinnedAds]);
     
     const fetchPosts = async ({ pageParam = 0 }) => {
-        const baseUrl = '/api/shared/posts';
-        const query = new URLSearchParams({ page: String(pageParam), size: String(POSTS_PER_PAGE) });
-        const url = `${baseUrl}?${query.toString()}`;
+        const url = buildFeedUrl({ page: pageParam, size: POSTS_PER_PAGE, tab: activeTab });
         const token = session?.access_token || null;
         const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
         const res = await fetch(url, { headers });
@@ -118,7 +123,9 @@ const SocialFeed = () => {
     
     const allPosts = useMemo(() => {
         const list = data?.pages.flatMap(page => page.data) ?? [];
-        return list.filter(post => (activeTab === 'ads') ? post.is_ad : !post.is_ad);
+        if (activeTab === 'ads') return list.filter(post => post.is_ad);
+        if (activeTab === 'social') return list.filter(post => !post.is_ad);
+        return list;
     }, [data, activeTab]);
  
     const rowVirtualizer = useWindowVirtualizer({

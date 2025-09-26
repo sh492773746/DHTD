@@ -3321,9 +3321,11 @@ app.post('/api/shared/posts/:id/pin', async (c) => {
     await db.update(sharedPosts).set({ isPinned: pinned ? 1 : 0 }).where(eq(sharedPosts.id, id));
     const updated = await db.select().from(sharedPosts).where(eq(sharedPosts.id, id)).limit(1);
     const result = updated?.[0] || { ...post, isPinned: pinned ? 1 : 0 };
+    const value = result.isPinned ?? result.is_pinned ?? (pinned ? 1 : 0);
     return c.json({
       ...result,
-      is_pinned: result.isPinned ?? result.is_pinned ?? (pinned ? 1 : 0),
+      isPinned: value,
+      is_pinned: value,
     });
   } catch (e) {
     console.error('POST /api/shared/posts/:id/pin error', e);
@@ -3354,25 +3356,26 @@ app.post('/api/posts', async (c) => {
       await defaultDb.insert(sharedProfiles).values({ id: userId, username, createdAt: now });
     }
 
-    const existingTenantProfile = await tenantDb.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
-    if (!existingTenantProfile || existingTenantProfile.length === 0) {
-      await tenantDb.insert(profiles).values({ id: userId, username: `用户${String(userId).slice(-4)}`, tenantId, points: 0, createdAt: now });
+    let profileRow = (await defaultDb.select().from(profiles).where(eq(profiles.id, userId)).limit(1))?.[0];
+    if (!profileRow) {
+      await defaultDb.insert(profiles).values({ id: userId, username: `用户${String(userId).slice(-4)}`, tenantId: 0, points: 0, createdAt: now });
+      profileRow = (await defaultDb.select().from(profiles).where(eq(profiles.id, userId)).limit(1))?.[0];
     }
-    await ensureUid(tenantDb, profiles, profiles.id, userId);
 
     try {
       const map = await readSettingsMap();
-      const socialCost = toInt(map['social_post_cost'], 100);
-      const adCost = toInt(map['ad_post_cost'], 200);
+      const socialCost = toInt(map['social_post_cost'], 0);
+      const adCost = toInt(map['ad_post_cost'], 0);
       const cost = isAd ? adCost : socialCost;
-      const pdb = await getTursoClientForTenant(0);
-      const gprof = (await pdb.select().from(profiles).where(eq(profiles.id, userId)).limit(1))?.[0];
-      if ((gprof?.freePostsCount || 0) > 0 && useFreePost) {
-        await pdb.update(profiles).set({ freePostsCount: (gprof.freePostsCount || 0) - 1 }).where(eq(profiles.id, userId));
-      } else {
-        if ((gprof?.points || 0) < cost) return c.json({ error: 'insufficient-points' }, 400);
-        await pdb.update(profiles).set({ points: (gprof?.points || 0) - cost }).where(eq(profiles.id, userId));
-        await pdb.insert(pointsHistoryTable).values({ userId, changeAmount: -cost, reason: isAd ? '发布广告' : '发布动态', createdAt: now });
+      const usePoints = cost > 0;
+      if ((profileRow?.freePostsCount || 0) > 0 && useFreePost) {
+        await defaultDb.update(profiles).set({ freePostsCount: (profileRow.freePostsCount || 0) - 1 }).where(eq(profiles.id, userId));
+        profileRow.freePostsCount = (profileRow.freePostsCount || 0) - 1;
+      } else if (usePoints) {
+        if ((profileRow?.points || 0) < cost) return c.json({ error: 'insufficient-points' }, 400);
+        await defaultDb.update(profiles).set({ points: (profileRow?.points || 0) - cost }).where(eq(profiles.id, userId));
+        profileRow.points = (profileRow?.points || 0) - cost;
+        await defaultDb.insert(pointsHistoryTable).values({ userId, changeAmount: -cost, reason: isAd ? '发布广告' : '发布动态', createdAt: now });
       }
     } catch {}
 

@@ -179,7 +179,7 @@ const CreatePost = ({ isOpen, setIsOpen, onPostCreated, tenantId }) => {
             const imageUrls = await uploadImagesViaBff();
 
             const endpoint = '/api/posts';
-            const body = { content: content.trim(), images: imageUrls, isAd, useFreePost, zone: isAd ? 'ads' : 'social' };
+            const body = { content: content.trim(), images: imageUrls, useFreePost, zone: isAd ? 'ads' : 'social' };
 
             const res = await fetch(endpoint, {
                 method: 'POST',
