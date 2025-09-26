@@ -57,12 +57,38 @@ const EditUserDialog = ({ user, isOpen, onClose, onSave }) => {
       const res = await fetch(`/api/admin/users/${encodeURIComponent(user.id)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
-        body: JSON.stringify({ ...formData, tenant_id: user?.tenant_id }),
+        body: JSON.stringify({
+          username: formData.username,
+          uid: formData.uid,
+          avatar_url: user.avatar_url,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data?.error) throw new Error(data?.error || `保存失败(${res.status})`);
+
+      const statsBody = {
+        tenant_id: user?.tenant_id,
+        points: formData.points,
+        virtual_currency: formData.virtual_currency,
+        free_posts_count: formData.free_posts_count,
+      };
+      const statsRes = await fetch(`/api/admin/users/${encodeURIComponent(user.id)}/stats`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
+        body: JSON.stringify(statsBody),
+      });
+      const statsData = await statsRes.json().catch(() => ({}));
+      if (!statsRes.ok || statsData?.error) throw new Error(statsData?.error || `保存积分失败(${statsRes.status})`);
+
+      const merged = {
+        ...user,
+        ...data,
+        points: statsData.points,
+        virtual_currency: statsData.virtual_currency,
+        free_posts_count: statsData.free_posts_count,
+      };
       toast({ title: '保存成功', description: '用户资料已更新。' });
-      onSave && onSave(data);
+      onSave && onSave(merged);
       onClose && onClose();
     } catch (err) {
       toast({ variant: 'destructive', title: '保存失败', description: err.message || '网络错误' });

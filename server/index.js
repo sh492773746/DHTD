@@ -2014,6 +2014,11 @@ app.put('/api/admin/users/:id', async (c) => {
     if (body.avatar_url !== undefined) identityUpdates.avatarUrl = String(body.avatar_url || '');
 
     if (Object.keys(identityUpdates).length > 0) {
+      const existing = await gdb.select().from(profiles).where(eq(profiles.id, targetId)).limit(1);
+      if (!existing || existing.length === 0) {
+        const nowIso = new Date().toISOString();
+        await gdb.insert(profiles).values({ id: targetId, username: identityUpdates.username || '', uid: identityUpdates.uid || null, avatarUrl: identityUpdates.avatarUrl || null, tenantId: 0, points: 0, createdAt: nowIso });
+      }
       await gdb.update(profiles).set(identityUpdates).where(eq(profiles.id, targetId));
     }
 
