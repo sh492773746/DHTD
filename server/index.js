@@ -1278,6 +1278,31 @@ app.get('/api/comments', async (c) => {
   }
 });
 
+app.get('/api/shared/posts', async (c) => {
+  __setCache(c, 15);
+  try {
+    await ensureSharedForumSchema();
+    const db = getGlobalDb();
+    const tables = getSharedTables();
+    const userId = c.get('userId');
+    const page = Number(c.req.query('page') || 0);
+    const size = Math.min(Number(c.req.query('size') || 10), 50);
+
+    const rows = await db
+      .select()
+      .from(tables.posts)
+      .orderBy(desc(tables.posts.isPinned), desc(tables.posts.createdAt))
+      .limit(size)
+      .offset(page * size);
+
+    const enriched = await enrichPosts(db, rows, tables.likes, tables.comments, userId);
+    return c.json(enriched);
+  } catch (e) {
+    console.error('GET /api/shared/posts error', e);
+    return c.json([], 500);
+  }
+});
+
 app.post('/api/comments', async (c) => {
   try {
     const defaultDb = await getTursoClientForTenant(0);
