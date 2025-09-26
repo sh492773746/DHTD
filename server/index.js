@@ -3313,9 +3313,18 @@ app.post('/api/shared/posts/:id/pin', async (c) => {
     const db = getGlobalDb();
     const id = Number(c.req.param('id'));
     const { pinned } = await c.req.json();
-    await db.update(sharedPosts).set({ isPinned: pinned ? 1 : 0 }).where(eq(sharedPosts.id, id));
+
     const rows = await db.select().from(sharedPosts).where(eq(sharedPosts.id, id)).limit(1);
-    return c.json(rows?.[0] || { id, is_pinned: pinned ? 1 : 0 });
+    const post = rows?.[0];
+    if (!post) return c.json({ error: 'not-found' }, 404);
+
+    await db.update(sharedPosts).set({ isPinned: pinned ? 1 : 0 }).where(eq(sharedPosts.id, id));
+    const updated = await db.select().from(sharedPosts).where(eq(sharedPosts.id, id)).limit(1);
+    const result = updated?.[0] || { ...post, isPinned: pinned ? 1 : 0 };
+    return c.json({
+      ...result,
+      is_pinned: result.isPinned ?? result.is_pinned ?? (pinned ? 1 : 0),
+    });
   } catch (e) {
     console.error('POST /api/shared/posts/:id/pin error', e);
     return c.json({ ok: false }, 500);
