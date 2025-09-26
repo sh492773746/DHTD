@@ -87,7 +87,7 @@ const TenantRequestForm = ({ onSuccess, isAdminCreation = false }) => {
         if (!found) {
           toast({ title: '用户未找到', description: `未找到 UID 为 ${searchUid} 的用户`, variant: 'destructive'});
           setSearchedUser(null);
-        } else {
+      } else {
           setSearchedUser(found);
           setTargetUserId(found.id);
         }
@@ -122,13 +122,13 @@ const TenantRequestForm = ({ onSuccess, isAdminCreation = false }) => {
 
     setLoading(false);
 
-    toast({ title: '申请已提交', description: '分站申请已成功提交，请等待管理员审核。' });
-    setDesiredDomain('');
-    setContactWangWang('');
-    setSearchUid('');
-    setSearchedUser(null);
-    setDomainAvailability(null);
-    if (onSuccess) onSuccess();
+      toast({ title: '申请已提交', description: '分站申请已成功提交，请等待管理员审核。' });
+      setDesiredDomain('');
+      setContactWangWang('');
+      setSearchUid('');
+      setSearchedUser(null);
+      setDomainAvailability(null);
+      if (onSuccess) onSuccess();
   };
 
   const renderDomainStatus = () => {

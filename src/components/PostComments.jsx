@@ -91,7 +91,8 @@ const PostComments = ({ postId, initialComments = [], onCommentCreated, isWeChat
     
     const commentCost = parseInt(siteSettings?.comment_cost || '1', 10);
     const [comments, setComments] = useState(initialComments);
-    const sharedMode = String(siteSettings?.social_forum_mode || '').toLowerCase() === 'shared';
+    const forumMode = String(siteSettings?.social_forum_mode || '').toLowerCase();
+    const sharedMode = forumMode === 'shared';
 
     useEffect(() => {
         setComments(initialComments);
@@ -103,7 +104,8 @@ const PostComments = ({ postId, initialComments = [], onCommentCreated, isWeChat
 
         setIsSubmitting(true);
         try {
-            const res = await fetch(sharedMode ? '/api/shared/comments' : '/api/comments', {
+            const commentEndpoint = sharedMode ? '/api/shared/comments' : '/api/comments';
+            const res = await fetch(commentEndpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('sb-access-token') || ''}` },
                 body: JSON.stringify({ postId, content: newComment.trim() })
@@ -126,7 +128,8 @@ const PostComments = ({ postId, initialComments = [], onCommentCreated, isWeChat
 
     const handleDeleteComment = async (commentId) => {
         try {
-            const res = await fetch(sharedMode ? `/api/shared/comments/${commentId}` : `/api/comments/${commentId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${localStorage.getItem('sb-access-token') || ''}` } });
+            const deleteEndpoint = sharedMode ? `/api/shared/comments/${commentId}` : `/api/comments/${commentId}`;
+            const res = await fetch(deleteEndpoint, { method: 'DELETE', headers: { Authorization: `Bearer ${localStorage.getItem('sb-access-token') || ''}` } });
             if (!res.ok) throw new Error('failed');
             onCommentDeleted(commentId);
             setComments(prev => prev.filter(c => c.id !== commentId));

@@ -109,7 +109,7 @@ const ContentModeration = () => {
                 post: c.post || null,
             }));
 
-            const groupedContent = {};
+        const groupedContent = {};
             for (const post of posts) {
                 const uid = post.author?.id;
                 if (!uid) continue;
@@ -122,12 +122,12 @@ const ContentModeration = () => {
                 if (!groupedContent[uid]) groupedContent[uid] = { profile: c.author, posts: [], comments: [] };
                 groupedContent[uid].comments.push(c);
             }
-            setContentByUser(groupedContent);
+        setContentByUser(groupedContent);
         } catch (err) {
             toast({ title: '加载失败', description: err.message || '网络错误', variant: 'destructive' });
             setContentByUser({});
         } finally {
-            setLoading(false);
+        setLoading(false);
         }
     }, [toast, session?.access_token]);
 
@@ -142,7 +142,7 @@ const ContentModeration = () => {
             if (type !== 'post') {
                 toast({ title: '提示', description: '评论暂不支持状态更新，请使用删除。' });
                 return;
-            }
+        }
             const res = await fetch(`/api/admin/posts/${id}/status`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },

@@ -21,7 +21,7 @@ import PostContent from '@/components/wechat-post-card/PostContent';
 import PostImageGrid from '@/components/wechat-post-card/PostImageGrid';
 import PostFooter from '@/components/wechat-post-card/PostFooter';
 
-const WeChatPostCard = ({ post, onPostUpdated, onDeletePost }) => {
+const WeChatPostCard = ({ post, onPostUpdated, onDeletePost, forumMode = 'shared' }) => {
   const { user, isAdmin, isSuperAdmin, session, siteSettings } = useAuth();
   const { toast } = useToast();
   
@@ -34,15 +34,18 @@ const WeChatPostCard = ({ post, onPostUpdated, onDeletePost }) => {
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [currentLightboxImage, setCurrentLightboxImage] = React.useState(null);
 
+  const effectiveForumMode = forumMode || String(siteSettings?.social_forum_mode || '').toLowerCase() || 'shared';
   const isAuthor = user && post.author?.id === user.id;
-  const sharedMode = String(siteSettings?.social_forum_mode || '').toLowerCase() === 'shared';
-  const canAdmin = sharedMode ? isSuperAdmin : isAdmin;
+  // Forum unified to shared mode; only super admin has admin actions
+  const canAdmin = !!isSuperAdmin;
   const token = session?.access_token || '';
 
   React.useEffect(() => {
     const load = async () => {
       try {
-        const endpoint = sharedMode ? `/api/shared/comments?postId=${encodeURIComponent(post.id)}` : `/api/comments?postId=${encodeURIComponent(post.id)}`;
+        const endpoint = effectiveForumMode === 'shared'
+          ? `/api/shared/comments?postId=${encodeURIComponent(post.id)}`
+          : `/api/comments?postId=${encodeURIComponent(post.id)}`;
         const res = await fetch(endpoint);
         if (!res.ok) return;
         const data = await res.json();
@@ -50,7 +53,7 @@ const WeChatPostCard = ({ post, onPostUpdated, onDeletePost }) => {
       } catch {}
     };
     load();
-  }, [post.id, sharedMode]);
+  }, [post.id]);
 
   React.useEffect(() => {
     setHasLiked(!!post.likedByMe);
@@ -73,7 +76,7 @@ const WeChatPostCard = ({ post, onPostUpdated, onDeletePost }) => {
     setLikesCount(prev => newHasLiked ? prev + 1 : Math.max(0, prev - 1));
 
     try {
-      const likeUrl = sharedMode ? '/api/shared/likes' : '/api/likes';
+      const likeUrl = effectiveForumMode === 'shared' ? '/api/shared/likes' : '/api/likes';
       const method = newHasLiked ? 'POST' : 'DELETE';
       const res = await fetch(likeUrl, {
         method,
@@ -98,7 +101,7 @@ const WeChatPostCard = ({ post, onPostUpdated, onDeletePost }) => {
   
   const handleDeletePost = async () => {
     try {
-      const url = sharedMode ? `/api/shared/posts/${post.id}` : `/api/posts/${post.id}`;
+      const url = effectiveForumMode === 'shared' ? `/api/shared/posts/${post.id}` : `/api/posts/${post.id}`;
       const res = await fetch(url, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error('failed');
       toast({ title: "删除成功", description: "帖子已删除。" });
@@ -111,7 +114,7 @@ const WeChatPostCard = ({ post, onPostUpdated, onDeletePost }) => {
   
   const handleTogglePin = async () => {
     try {
-      const url = sharedMode ? `/api/shared/posts/${post.id}/pin` : `/api/posts/${post.id}/pin`;
+      const url = effectiveForumMode === 'shared' ? `/api/shared/posts/${post.id}/pin` : `/api/posts/${post.id}/pin`;
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -137,7 +140,7 @@ const WeChatPostCard = ({ post, onPostUpdated, onDeletePost }) => {
     }
     setIsEditing(true);
   };
-  
+
   const handleCommentCreated = (newComment) => {
     setComments(prev => [newComment, ...prev]);
     onPostUpdated({ ...post, comments: [newComment, ...comments] });
@@ -148,6 +151,12 @@ const WeChatPostCard = ({ post, onPostUpdated, onDeletePost }) => {
     setComments(updatedComments);
     onPostUpdated({ ...post, comments: updatedComments });
   };
+
+  const computedCommentsCount = React.useMemo(() => {
+    if (typeof post.commentsCount === 'number') return post.commentsCount;
+    if (typeof post.comments_count === 'number') return post.comments_count;
+    return comments.length;
+  }, [post.commentsCount, post.comments_count, comments.length]);
 
   if (!post.author) {
     return (
@@ -176,13 +185,26 @@ const WeChatPostCard = ({ post, onPostUpdated, onDeletePost }) => {
         )}
         
         {!post.is_ad && (
-          <PostFooter post={post} hasLiked={hasLiked} likesCount={likesCount} commentsCount={comments.length} onLike={handleLike} onToggleComments={handleToggleComments} />
+          <PostFooter
+            post={post}
+            hasLiked={hasLiked}
+            likesCount={likesCount}
+            commentsCount={computedCommentsCount}
+            onLike={handleLike}
+            onToggleComments={handleToggleComments}
+          />
         )}
 
         <AnimatePresence>
           {showComments && !post.is_ad && (
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-4">
-              <PostComments postId={post.id} initialComments={comments} onCommentCreated={handleCommentCreated} onCommentDeleted={handleCommentDeleted} isWeChatStyle={true}/>
+              <PostComments
+                postId={post.id}
+                initialComments={comments}
+                onCommentCreated={handleCommentCreated}
+                onCommentDeleted={handleCommentDeleted}
+                isWeChatStyle={true}
+              />
             </motion.div>
           )}
         </AnimatePresence>

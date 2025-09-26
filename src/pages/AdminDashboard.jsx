@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { motion } from 'framer-motion';
-import { Users, FileText } from 'lucide-react';
+import { Users, FileText, ExternalLink } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
@@ -12,6 +12,7 @@ import { zhCN } from 'date-fns/locale';
 import { useQuery } from '@tanstack/react-query';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
 
 // Umami overview removed; using Vercel Analytics globally
 
@@ -128,6 +129,7 @@ const AdminDashboard = () => {
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight">仪表盘</h1>
             <p className="text-sm text-gray-500 mt-1">查看您网站的核心指标和近期活动。</p>
           </div>
+          <div className="flex items-center gap-2">
           <Select value={period} onValueChange={setPeriod}>
             <SelectTrigger className="w-full sm:w-[180px]">
               <SelectValue placeholder="选择时间范围" />
@@ -139,6 +141,13 @@ const AdminDashboard = () => {
               <SelectItem value="30d">过去 30 天</SelectItem>
             </SelectContent>
           </Select>
+            <Button variant="outline" asChild>
+              <a href="https://vercel.com/analytics" target="_blank" rel="noopener noreferrer" className="inline-flex items-center">
+                查看统计（Vercel）
+                <ExternalLink className="h-4 w-4 ml-1" />
+              </a>
+            </Button>
+          </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-2">

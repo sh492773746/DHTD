@@ -495,7 +495,6 @@ app.get('/api/admin/tenant-admins', async (c) => {
     return c.json([]);
   }
 });
-
 app.get('/api/admin/bootstrap-super-admin', async (c) => {
   try {
     const userId = c.get('userId'); if (!userId) return c.json({ ok: false, error: 'unauthorized' }, 401);
@@ -619,7 +618,6 @@ app.get('/api/auth/debug-verify', async (c) => {
     return c.json(out, 401);
   }
 });
-
 app.post('/api/uploads/post-images', async (c) => {
   try {
     const userId = c.get('userId');
@@ -775,7 +773,6 @@ app.post('/api/uploads/resumable/chunk', async (c) => {
     return c.json({ error: 'failed' }, 500);
   }
 });
-
 app.post('/api/uploads/resumable/finish', async (c) => {
   try {
     const userId = c.get('userId'); if (!userId) return c.json({ error: 'unauthorized' }, 401);
@@ -931,7 +928,6 @@ app.post('/api/admin/fix-profile-id', async (c) => {
     return c.json({ ok: false }, 500);
   }
 });
-
 app.get('/api/profile', async (c) => {
   try {
     const userId = c.req.query('userId');
@@ -1214,131 +1210,41 @@ app.get('/api/page-content', async (c) => {
     return c.json([]);
   }
 });
-
 app.get('/api/posts', async (c) => {
   try {
-    const defaultDb = await getTursoClientForTenant(0);
-    const host = c.get('host').split(':')[0];
-    const tab = c.req.query('tab') || 'social';
-    const page = Number(c.req.query('page') || 0);
-    const pageSize = Math.min(Number(c.req.query('size') || 20), 50);
-    const authorId = c.req.query('authorId') || null;
-    const source = c.req.query('source') || 'tenant'; // tenant | global
-    const tenantId = await resolveTenantId(defaultDb, host);
-    const effectiveTenantId = source === 'global' ? 0 : tenantId;
-    const db = await getTursoClientForTenant(effectiveTenantId);
-    const isAd = tab === 'ads' ? 1 : 0;
-
-    const baseWhere = and(
-      eq(postsTable.status, 'approved'),
-      eq(postsTable.isAd, isAd),
-      eq(postsTable.tenantId, effectiveTenantId)
-    );
-    const whereExpr = authorId ? and(baseWhere, eq(postsTable.authorId, authorId)) : baseWhere;
-
-    let rows = await db
-      .select()
-      .from(postsTable)
-      .where(whereExpr)
-      .orderBy(desc(postsTable.isPinned), desc(postsTable.createdAt))
-      .limit(pageSize)
-      .offset(page * pageSize);
-
-    // Auto seed demo content in dev when empty (only for social tab and first page, and only when no author filter)
-    if ((rows || []).length === 0 && page === 0 && isAd === 0 && !authorId && process.env.NODE_ENV !== 'production') {
-      const nowIso = new Date().toISOString();
-      const demoAuthors = [
-        { id: 'demo-user-1', username: '小海', avatarUrl: null },
-        { id: 'demo-user-2', username: '贝壳', avatarUrl: null },
-      ];
-      for (const a of demoAuthors) {
-        const exists = await db.select().from(profiles).where(eq(profiles.id, a.id)).limit(1);
-        if (!exists || exists.length === 0) {
-          await db.insert(profiles).values({ id: a.id, username: a.username, avatarUrl: a.avatarUrl, tenantId: tenantId, points: 0, createdAt: nowIso });
-        }
-      }
-      const samples = [
-        { authorId: 'demo-user-1', content: '欢迎来到社区！这是演示动态。', images: JSON.stringify([]), isPinned: 1 },
-        { authorId: 'demo-user-2', content: '你可以在这里发布图文，互动评论～', images: JSON.stringify(['https://picsum.photos/seed/demo2/600/400']), isPinned: 0 },
-        { authorId: 'demo-user-1', content: '试着点赞或发表评论看看效果。', images: JSON.stringify([]), isPinned: 0 },
-      ];
-      for (const s of samples) {
-        await db.insert(postsTable).values({
-          tenantId,
-          authorId: s.authorId,
-          content: s.content,
-          images: s.images,
-          isAd: 0,
-          isPinned: s.isPinned,
-          status: 'approved',
-          createdAt: nowIso,
-          updatedAt: nowIso,
-        });
-      }
-      rows = await db
-        .select()
-        .from(postsTable)
-        .where(whereExpr)
-        .orderBy(desc(postsTable.isPinned), desc(postsTable.createdAt))
-        .limit(pageSize)
-        .offset(page * pageSize);
-    }
-
-    const postIds = (rows || []).map((r) => r.id);
-    const authorIds = Array.from(new Set((rows || []).map((r) => r.authorId).filter(Boolean)));
-
-    // batch authors
-    let authors = [];
-    if (authorIds.length > 0) {
-      authors = await db.select().from(profiles).where(inArray(profiles.id, authorIds));
-    }
-    const authorMap = new Map();
-    for (const a of authors || []) {
-      authorMap.set(a.id, { id: a.id, username: a.username, avatar_url: a.avatarUrl });
-    }
-
-    // batch likes/comments count via grouped queries
-    const likesCountMap = new Map();
-    const commentsCountMap = new Map();
-    if (postIds.length > 0) {
-      try {
-        const raw = await getLibsqlClientForTenantRaw(tenantId);
-        const placeholders = postIds.map(() => '?').join(',');
-        const likeRows = await raw.execute({ sql: `select post_id as pid, count(1) as c from likes where post_id in (${placeholders}) group by post_id`, args: postIds });
-        for (const r of likeRows?.rows || []) {
-          const pid = r.pid ?? r[0];
-          const c = Number(r.c ?? r[1] ?? 0);
-          if (pid != null) likesCountMap.set(Number(pid), c);
-        }
-        const cmRows = await raw.execute({ sql: `select post_id as pid, count(1) as c from comments where post_id in (${placeholders}) group by post_id`, args: postIds });
-        for (const r of cmRows?.rows || []) {
-          const pid = r.pid ?? r[0];
-          const c = Number(r.c ?? r[1] ?? 0);
-          if (pid != null) commentsCountMap.set(Number(pid), c);
-      }
-      } catch {}
-    }
-
-    // likedByMe
-    let likedSet = new Set();
+    const { mode, tenantId, tenantDb, defaultDb } = await getForumModeForTenant(c.get('host').split(':')[0]);
     const userId = c.get('userId');
-    if (userId && postIds.length > 0) {
-      const likedRows = await db.select({ pid: likesTable.postId }).from(likesTable).where(and(eq(likesTable.userId, userId), inArray(likesTable.postId, postIds)));
-      likedSet = new Set((likedRows || []).map(r => r.pid));
+    const page = Number(c.req.query('page') || 0);
+    const size = Math.min(Number(c.req.query('size') || 10), 50);
+    const tab = String(c.req.query('tab') || 'social');
+
+    if (mode === 'shared') {
+      await ensureSharedForumSchema();
+      const tables = getSharedTables();
+      const rows = await defaultDb
+        .select()
+        .from(tables.posts)
+        .orderBy(desc(tables.posts.isPinned), desc(tables.posts.createdAt))
+        .limit(size)
+        .offset(page * size);
+      const enriched = await enrichPosts(defaultDb, rows, tables.likes, tables.comments, userId);
+      return c.json(enriched);
     }
 
-    const enriched = (rows || []).map((r) => ({
-      ...r,
-      author: authorMap.get(r.authorId) || null,
-      likesCount: likesCountMap.get(r.id) || 0,
-      commentsCount: commentsCountMap.get(r.id) || 0,
-      likedByMe: userId ? likedSet.has(r.id) : false,
-    }));
-
+    const tables = getTenantTables();
+    const isAd = tab === 'ads' ? 1 : 0;
+    const rows = await tenantDb
+      .select()
+      .from(tables.posts)
+      .where(and(eq(tables.posts.tenantId, tenantId), eq(tables.posts.isAd, isAd), eq(tables.posts.status, 'approved')))
+      .orderBy(desc(tables.posts.isPinned), desc(tables.posts.createdAt))
+      .limit(size)
+      .offset(page * size);
+    const enriched = await enrichPosts(tenantDb, rows, tables.likes, tables.comments, userId);
     return c.json(enriched);
   } catch (e) {
     console.error('GET /api/posts error', e);
-    return c.json([]);
+    return c.json([], 500);
   }
 });
 
@@ -1505,7 +1411,6 @@ app.post('/api/posts/:id/pin', async (c) => {
     return c.json({ ok: false });
   }
 });
-
 app.get('/api/notifications/unread', async (c) => {
   try {
     const db = await getTursoClientForTenant(0);
@@ -1610,7 +1515,6 @@ app.get('/api/plausible/stats', async (c) => {
     return c.json([]);
   }
 });
-
 // New: Umami stats proxy
 app.get('/api/umami/stats', async (c) => {
   __setCache(c, 60);
@@ -1847,7 +1751,6 @@ app.get('/api/umami/overview', async (c) => {
     return c.json({ summary: null, series: [] });
   }
 });
-
 app.get('/api/admin/users', async (c) => {
   try {
     const userId = c.get('userId'); if (!userId) return c.json([], 401);
@@ -2005,7 +1908,6 @@ app.get('/api/admin/users', async (c) => {
     return c.json([]);
   }
 });
-
 // Manage user roles (super-admin / tenant-admin)
 app.post('/api/admin/users/:id/role', async (c) => {
   try {
@@ -2398,7 +2300,6 @@ app.post('/api/admin/seed-tenant', async (c) => {
     return c.json({ ok: false }, 500);
   }
 });
-
 app.post('/api/admin/seed-shared', async (c) => {
   try {
     const userId = c.get('userId');
@@ -2485,7 +2386,6 @@ app.post('/api/admin/branch-map', async (c) => {
     return c.json({ error: 'failed' }, 500);
   }
 });
-
 app.delete('/api/admin/branch-map/:tenantId', async (c) => {
   try {
     const userId = c.get('userId');
@@ -2499,13 +2399,11 @@ app.delete('/api/admin/branch-map/:tenantId', async (c) => {
     return c.json({ error: 'failed' }, 500);
   }
 });
-
 function requireAdmin(c) {
   const userId = c.get('userId');
   if (!userId) return { ok: false, reason: 'unauthorized' };
   return { ok: true, userId };
 }
-
 async function isSuperAdminUser(userId) {
   if (!userId) return false;
   try {
@@ -2979,7 +2877,6 @@ app.put('/api/admin/page-content/:id', async (c) => {
     return c.json({ ok: false }, 500);
   }
 });
-
 app.delete('/api/admin/page-content/:id', async (c) => {
   try {
     const auth = requireAdmin(c);
@@ -3125,7 +3022,6 @@ app.post('/api/admin/branches', async (c) => {
     return c.json({ ok: false }, 500);
   }
 });
-
 app.delete('/api/admin/branches/:tenantId', async (c) => {
   try {
     const auth = requireAdmin(c);
@@ -3142,7 +3038,6 @@ app.delete('/api/admin/branches/:tenantId', async (c) => {
     return c.json({ ok: false }, 500);
   }
 });
-
 app.post('/api/admin/tenants/:id/provision', async (c) => {
   try {
     const auth = requireAdmin(c);
@@ -3257,130 +3152,6 @@ app.post('/api/admin/tenants/:id/provision', async (c) => {
 });
 
 // Shared forum endpoints (global)
-app.get('/api/shared/posts', async (c) => {
-  __setCache(c, 30);
-  try {
-    await ensureSharedForumSchema();
-    const db = getGlobalDb();
-    const page = Number(c.req.query('page') || 0);
-    const size = Math.min(Number(c.req.query('size') || 10), 50);
-    const rows = await db.select().from(sharedPosts).orderBy(desc(sharedPosts.isPinned), desc(sharedPosts.createdAt)).limit(size).offset(page * size);
-    const authorIds = Array.from(new Set((rows || []).map(r => r.authorId)));
-    let authors = [];
-    if (authorIds.length) authors = await db.select().from(sharedProfiles).where(inArray(sharedProfiles.id, authorIds));
-    // ensure uid/backfill shared_profiles from base profiles
-    for (const a of authors || []) {
-      if (!a.uid) { try { await ensureUid(getGlobalDb(), profiles, profiles.id, a.id); } catch {} }
-    }
-    const existingIds = new Set((authors || []).map(a => a.id));
-    const missing = authorIds.filter(id => !existingIds.has(id));
-    if (missing.length > 0) {
-      const baseProfiles = await db.select().from(profiles).where(inArray(profiles.id, missing));
-      const now = new Date().toISOString();
-      for (const m of missing) {
-        const base = (baseProfiles || []).find(b => b.id === m);
-        const username = base?.username || '用户';
-        const avatarUrl = base?.avatarUrl || null;
-        try { await db.insert(sharedProfiles).values({ id: m, username, avatarUrl, createdAt: now }); } catch {}
-        try { await ensureUid(getGlobalDb(), profiles, profiles.id, m); } catch {}
-      }
-    }
-    const rereadAuthors = authorIds.length ? await db.select().from(sharedProfiles).where(inArray(sharedProfiles.id, authorIds)) : [];
-    const authorMap = new Map((rereadAuthors || []).map(a => [a.id, { id: a.id, username: a.username, avatar_url: a.avatarUrl, uid: a.uid }]));
-    // fallback source: base profiles for missing fields
-    const baseAll = authorIds.length ? await db.select().from(profiles).where(inArray(profiles.id, authorIds)) : [];
-    const baseMap = new Map((baseAll || []).map(b => [b.id, { id: b.id, username: b.username, avatar_url: b.avatarUrl }]));
-    // persist enrichments back to shared_profiles where fields are missing
-    try {
-      for (const a of rereadAuthors || []) {
-        const base = baseMap.get(a.id);
-        if (!base) continue;
-        const needUsername = !a.username && base.username;
-        const needAvatar = !a.avatarUrl && base.avatar_url;
-        if (needUsername || needAvatar) {
-          const upd = {};
-          if (needUsername) upd.username = base.username;
-          if (needAvatar) upd.avatarUrl = base.avatar_url;
-          try { await db.update(sharedProfiles).set(upd).where(eq(sharedProfiles.id, a.id)); } catch {}
-        }
-      }
-    } catch {}
-     // counts
-     const withCounts = [];
-     const userId = c.get('userId');
-     // prefetch likedByMe map
-     let likedSet = new Set();
-     if (userId && (rows || []).length > 0) {
-       const ids = (rows || []).map(r => r.id);
-       const likedRows = await db.select({ pid: sharedLikes.postId }).from(sharedLikes).where(and(eq(sharedLikes.userId, userId), inArray(sharedLikes.postId, ids)));
-       likedSet = new Set((likedRows || []).map(r => r.pid));
-     }
-    for (const r of rows || []) {
-      const lc = await db.select({ c: sql`count(1)` }).from(sharedLikes).where(eq(sharedLikes.postId, r.id));
-      const cc = await db.select({ c: sql`count(1)` }).from(sharedComments).where(eq(sharedComments.postId, r.id));
-      let author = authorMap.get(r.authorId) || baseMap.get(r.authorId) || null;
-      if (!author) {
-        try {
-          const fallback = await db.select({ id: profiles.id, username: profiles.username, avatarUrl: profiles.avatarUrl }).from(profiles).where(eq(profiles.id, r.authorId)).limit(1);
-          const found = fallback?.[0] || null;
-          if (found) {
-            author = { id: found.id, username: found.username || `用户${String(found.id).slice(-4)}`, avatar_url: found.avatarUrl || null };
-          }
-        } catch {}
-      }
-      if (!author) {
-        author = { id: r.authorId, username: `用户${String(r.authorId).slice(-4)}`, avatar_url: null };
-      }
-      const normalizedAuthor = {
-        id: author.id,
-        username: author.username || `用户${String(author.id).slice(-4)}`,
-        avatar_url: author.avatar_url || author.avatarUrl || null,
-      };
-      withCounts.push({
-        ...r,
-        author: normalizedAuthor,
-        likesCount: Number(lc?.[0]?.c || 0),
-        commentsCount: Number(cc?.[0]?.c || 0),
-        likedByMe: userId ? likedSet.has(r.id) : false,
-      });
-    }
-     return c.json(withCounts);
-  } catch (e) {
-    console.error('GET /api/shared/posts error', e);
-    return c.json([]);
-  }
-});
-
-app.post('/api/shared/posts', async (c) => {
-  try {
-    const userId = c.get('userId');
-    if (!userId) return c.json({ error: 'unauthorized' }, 401);
-    const db = getGlobalDb();
-    const body = await c.req.json();
-    const content = String(body?.content || '');
-    const images = Array.isArray(body?.images) ? body.images : [];
-    const now = new Date().toISOString();
-    // ensure profile exists
-    const prof = await db.select().from(sharedProfiles).where(eq(sharedProfiles.id, userId)).limit(1);
-    if (!prof || prof.length === 0) {
-      let username = '用户';
-      try {
-        const base = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
-        if (base && base[0] && base[0].username) username = base[0].username;
-      } catch {}
-      await db.insert(sharedProfiles).values({ id: userId, username, createdAt: now });
-    }
-    await db.insert(sharedPosts).values({ authorId: userId, content, images: JSON.stringify(images), isPinned: 0, status: 'approved', createdAt: now, updatedAt: now });
-    const lastRows = await db.select({ id: sharedPosts.id }).from(sharedPosts).orderBy(desc(sharedPosts.id)).limit(1);
-    const id = Number(lastRows?.[0]?.id || 0);
-    const author = (await db.select().from(sharedProfiles).where(eq(sharedProfiles.id, userId)).limit(1))?.[0] || null;
-    const created = { id, authorId: userId, content, images: JSON.stringify(images), isPinned: 0, status: 'approved', createdAt: now, updatedAt: now, author: author ? { id: author.id, username: author.username, avatar_url: author.avatarUrl } : null, likesCount: 0, commentsCount: 0 };
-    return c.json(created);
-  } catch (e) {
-    console.error('POST /api/shared/posts error', e);
-    return c.json({ error: 'failed' }, 500);
-  }
-});
 
 app.get('/api/shared/comments', async (c) => {
   try {
@@ -3525,25 +3296,65 @@ app.post('/api/shared/posts/:id/pin', async (c) => {
     return c.json({ ok: false }, 500);
   }
 });
-
 app.post('/api/posts', async (c) => {
   try {
+    const { mode, tenantId, tenantDb, defaultDb } = await getForumModeForTenant(c.get('host').split(':')[0]);
     const userId = c.get('userId');
     if (!userId) return c.json({ error: 'unauthorized' }, 401);
-    const defaultDb = await getTursoClientForTenant(0);
-    const host = c.get('host').split(':')[0];
-    const tenantId = await resolveTenantId(defaultDb, host);
-    const db = await getTursoClientForTenant(tenantId);
     const body = await c.req.json();
     const content = String(body?.content || '');
     const images = Array.isArray(body?.images) ? body.images : [];
+    const useFreePost = Boolean(body?.useFreePost);
     const isAd = body?.isAd ? 1 : 0;
     const now = new Date().toISOString();
-    // ensure profile exists
-    const p = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
-    if (!p || p.length === 0) { await db.insert(profiles).values({ id: userId, username: '用户', tenantId, points: 0, createdAt: now }); }
-    await ensureUid(db, profiles, profiles.id, userId);
-    // deduct cost from global profile using settings
+
+    if (mode === 'shared') {
+      await ensureSharedForumSchema();
+      const existing = await defaultDb.select().from(sharedProfiles).where(eq(sharedProfiles.id, userId)).limit(1);
+      if (!existing || existing.length === 0) {
+        let username = `用户${String(userId).slice(-4)}`;
+        try {
+          const base = await defaultDb.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
+          if (base && base[0]?.username) username = base[0].username;
+        } catch {}
+        await defaultDb.insert(sharedProfiles).values({ id: userId, username, createdAt: now });
+      }
+      await defaultDb.insert(sharedPosts).values({
+        authorId: userId,
+        content,
+        images: JSON.stringify(images),
+        isPinned: 0,
+        status: 'approved',
+        createdAt: now,
+        updatedAt: now,
+        isAd,
+      });
+      const lastRows = await defaultDb.select({ id: sharedPosts.id }).from(sharedPosts).orderBy(desc(sharedPosts.id)).limit(1);
+      const id = Number(lastRows?.[0]?.id || 0);
+      const author = (await defaultDb.select().from(sharedProfiles).where(eq(sharedProfiles.id, userId)).limit(1))?.[0] || null;
+      return c.json({
+        id,
+        authorId: userId,
+        content,
+        images: JSON.stringify(images),
+        isPinned: 0,
+        status: 'approved',
+        createdAt: now,
+        updatedAt: now,
+        isAd,
+        author: author ? { id: author.id, username: author.username, avatar_url: author.avatarUrl } : null,
+        likesCount: 0,
+        commentsCount: 0,
+      });
+    }
+
+    const tables = getTenantTables();
+    const existing = await tenantDb.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
+    if (!existing || existing.length === 0) {
+      await tenantDb.insert(profiles).values({ id: userId, username: `用户${String(userId).slice(-4)}`, tenantId, points: 0, createdAt: now });
+    }
+    await ensureUid(tenantDb, profiles, profiles.id, userId);
+
     try {
       const map = await readSettingsMap();
       const socialCost = toInt(map['social_post_cost'], 100);
@@ -3551,7 +3362,7 @@ app.post('/api/posts', async (c) => {
       const cost = isAd ? adCost : socialCost;
       const pdb = await getTursoClientForTenant(0);
       const gprof = (await pdb.select().from(profiles).where(eq(profiles.id, userId)).limit(1))?.[0];
-      if ((gprof?.freePostsCount || 0) > 0 && body?.useFreePost) {
+      if ((gprof?.freePostsCount || 0) > 0 && useFreePost) {
         await pdb.update(profiles).set({ freePostsCount: (gprof.freePostsCount || 0) - 1 }).where(eq(profiles.id, userId));
       } else {
         if ((gprof?.points || 0) < cost) return c.json({ error: 'insufficient-points' }, 400);
@@ -3559,12 +3370,36 @@ app.post('/api/posts', async (c) => {
         await pdb.insert(pointsHistoryTable).values({ userId, changeAmount: -cost, reason: isAd ? '发布广告' : '发布动态', createdAt: now });
       }
     } catch {}
-    await db.insert(postsTable).values({ tenantId, authorId: userId, content, images: JSON.stringify(images), isAd, isPinned: 0, status: 'approved', createdAt: now, updatedAt: now });
-    const lastRows = await db.select({ id: postsTable.id }).from(postsTable).orderBy(desc(postsTable.id)).limit(1);
+
+    await tenantDb.insert(tables.posts).values({
+      tenantId,
+      authorId: userId,
+      content,
+      images: JSON.stringify(images),
+      isAd,
+      isPinned: 0,
+      status: 'approved',
+      createdAt: now,
+      updatedAt: now,
+    });
+    const lastRows = await tenantDb.select({ id: tables.posts.id }).from(tables.posts).orderBy(desc(tables.posts.id)).limit(1);
     const id = Number(lastRows?.[0]?.id || 0);
-    const author = (await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1))?.[0] || null;
-    const created = { id, tenantId, authorId: userId, content, images: JSON.stringify(images), isAd, isPinned: 0, status: 'approved', createdAt: now, updatedAt: now, author: author ? { id: author.id, username: author.username, avatar_url: author.avatarUrl } : null, likesCount: 0, commentsCount: 0 };
-    return c.json(created);
+    const author = (await tenantDb.select().from(profiles).where(eq(profiles.id, userId)).limit(1))?.[0] || null;
+    return c.json({
+      id,
+      tenantId,
+      authorId: userId,
+      content,
+      images: JSON.stringify(images),
+      isAd,
+      isPinned: 0,
+      status: 'approved',
+      createdAt: now,
+      updatedAt: now,
+      author: author ? { id: author.id, username: author.username, avatar_url: author.avatarUrl } : null,
+      likesCount: 0,
+      commentsCount: 0,
+    });
   } catch (e) {
     console.error('POST /api/posts error', e);
     return c.json({ error: 'failed' }, 500);
@@ -3745,7 +3580,6 @@ app.get('/api/admin/databases/:name/health', async (c) => {
     return c.json({ pass: false, tables: [], missing: [], extra: [], error: e?.message || 'failed' }, 500);
   }
 });
-
 // Points: history
 app.get('/api/points/history', async (c) => {
   try {
@@ -3917,7 +3751,6 @@ app.post('/api/shop/products', async (c) => {
     return c.json({ error: 'failed' }, 500);
   }
 });
-
 app.delete('/api/shop/products/:id', async (c) => {
   try {
     const userId = c.get('userId'); if (!userId) return c.json({ error: 'unauthorized' }, 401);
@@ -3933,7 +3766,6 @@ app.delete('/api/shop/products/:id', async (c) => {
     return c.json({ ok: false }, 500);
   }
 });
-
 // ---------- Shop: Redeem ----------
 app.post('/api/shop/redeem', async (c) => {
   try {
@@ -4389,7 +4221,6 @@ app.post('/api/shop/redemptions/:id/status', async (c) => {
     return c.json({ error: 'failed' }, 500);
   }
 });
-
 // ---------- Points: Check-in & Invite reward ----------
 app.post('/api/points/checkin', async (c) => {
   try {
@@ -4425,7 +4256,6 @@ app.post('/api/points/checkin', async (c) => {
     return c.json({ error: 'failed' }, 500);
   }
 });
-
 app.post('/api/points/reward/invite', async (c) => {
   try {
     const userId = c.get('userId'); if (!userId) return c.json({ error: 'unauthorized' }, 401);
@@ -4531,7 +4361,6 @@ app.get('/api/admin/settings', async (c) => {
     return c.json([]);
   }
 });
-
 app.post('/api/admin/settings', async (c) => {
   try {
     const userId = c.get('userId'); if (!userId) return c.json({ error: 'unauthorized' }, 401);
@@ -4570,7 +4399,6 @@ app.post('/api/admin/settings', async (c) => {
     return c.json({ error: 'failed' }, 500);
   }
 });
-
 app.delete('/api/admin/settings/:key', async (c) => {
   try {
     const userId = c.get('userId'); if (!userId) return c.json({ error: 'unauthorized' }, 401);
@@ -4593,19 +4421,88 @@ app.delete('/api/admin/settings/:key', async (c) => {
 });
 
 // Helpers: settings
-const __settingsCache = { data: null, ts: 0 };
+const __globalSettingsCache = { data: null, ts: 0 };
 async function readSettingsMap() {
   const now = Date.now();
-  if (__settingsCache.data && (now - __settingsCache.ts) < 30000) {
-    return __settingsCache.data;
+  if (__globalSettingsCache.data && (now - __globalSettingsCache.ts) < 30000) {
+    return __globalSettingsCache.data;
   }
   const db = await getTursoClientForTenant(0);
-  const rows = await db.select().from(appSettings).where(inArray(appSettings.tenantId, [0]));
+  const rows = await db.select().from(appSettings).where(eq(appSettings.tenantId, 0));
   const map = {};
   for (const r of rows || []) map[r.key] = r.value;
-  __settingsCache.data = map;
-  __settingsCache.ts = now;
+  __globalSettingsCache.data = map;
+  __globalSettingsCache.ts = now;
   return map;
+}
+
+async function readTenantSettings(tenantId) {
+  const db = await getTursoClientForTenant(tenantId);
+  try { await ensureDefaultSettings(db, tenantId); } catch {}
+  const rows = await db.select().from(appSettings).where(eq(appSettings.tenantId, tenantId));
+  const map = new Map((rows || []).map(r => [r.key, r.value]));
+  return map;
+}
+
+async function getForumModeForTenant(host) {
+  const defaultDb = await getTursoClientForTenant(0);
+  const tenantId = await resolveTenantId(defaultDb, host);
+  const tenantDb = await getTursoClientForTenant(tenantId);
+  const settings = await readTenantSettings(tenantId);
+  const mode = String(settings.get('social_forum_mode') || (tenantId === 0 ? 'shared' : 'isolated')).toLowerCase();
+  return { mode, tenantId, tenantDb, defaultDb };
+}
+
+async function buildAuthorProfiles(db, authorIds) {
+  if (!authorIds || authorIds.length === 0) return new Map();
+  const rows = await db.select().from(profiles).where(inArray(profiles.id, authorIds));
+  const map = new Map();
+  for (const row of rows || []) {
+    map.set(row.id, {
+      id: row.id,
+      username: row.username || row.uid || `用户${String(row.id).slice(-4)}`,
+      avatar_url: row.avatarUrl || null,
+    });
+  }
+  return map;
+}
+
+async function enrichPosts(db, rows, likesTableRef, commentsTableRef, userId) {
+  if (!rows || rows.length === 0) return [];
+  const authorIds = Array.from(new Set(rows.map(r => r.authorId)));
+  const authorMap = await buildAuthorProfiles(db, authorIds);
+  let likedSet = new Set();
+  if (userId) {
+    const ids = rows.map(r => r.id);
+    const likedRows = await db.select({ pid: likesTableRef.postId }).from(likesTableRef).where(and(eq(likesTableRef.userId, userId), inArray(likesTableRef.postId, ids)));
+    likedSet = new Set((likedRows || []).map(r => r.pid));
+  }
+  const enriched = [];
+  for (const r of rows) {
+    const lc = await db.select({ c: sql`count(1)` }).from(likesTableRef).where(eq(likesTableRef.postId, r.id));
+    const cc = await db.select({ c: sql`count(1)` }).from(commentsTableRef).where(eq(commentsTableRef.postId, r.id));
+    const author = authorMap.get(r.authorId) || {
+      id: r.authorId,
+      username: `用户${String(r.authorId).slice(-4)}`,
+      avatar_url: null,
+    };
+    enriched.push({
+      ...r,
+      author,
+      likesCount: Number(lc?.[0]?.c || 0),
+      commentsCount: Number(cc?.[0]?.c || 0),
+      likedByMe: userId ? likedSet.has(r.id) : false,
+    });
+  }
+  return enriched;
+}
+
+function getTenantTables() {
+  return { posts: postsTable, comments: commentsTable, likes: likesTable };
+}
+
+function getSharedTables() {
+  return { posts: sharedPosts, comments: sharedComments, likes: sharedLikes };
 }
 
 function toInt(val, def) {
@@ -4670,7 +4567,6 @@ app.put('/api/shared/posts/:id', async (c) => {
     return c.json({ error: 'failed' }, 500);
   }
 });
-
 app.get('/api/admin/tenants', async (c) => {
   try {
     const userId = c.get('userId'); if (!userId) return c.json([], 401);
@@ -4908,7 +4804,6 @@ app.get('/api/invite/:code', async (c) => {
     return c.json({ ok: false }, 500);
   }
 });
-
 // Ensure global shared forum tables
 const __ensureCache = { shared: false, tenant: new Set(), profileCols: new Set(), redemptCols: new Set(), pointsHistory: new Set() };
 
@@ -4995,7 +4890,6 @@ app.delete('/api/shop/redemptions/:id', async (c) => {
     return c.json({ ok: false }, 500);
   }
 });
-
 app.post('/api/shop/redemptions/batch-action', async (c) => {
   try {
     const userId = c.get('userId'); if (!userId) return c.json({ ok: false, error: 'unauthorized' }, 401);
@@ -5128,7 +5022,6 @@ app.delete('/api/tenant/settings', async (c) => {
     return c.json({ ok: false }, 500);
   }
 });
-
 app.get('/api/embed/cipher', async (c) => {
   try {
     const widget = String(c.req.query('widget') || '').trim();
@@ -5198,7 +5091,6 @@ app.get('/api/tenant/resolve', async (c) => {
     return c.json({ tenantId: 0 });
   }
 });
-
 app.post('/api/admin/tenants/:id/domain/bind', async (c) => {
   try {
     const auth = requireAdmin(c);
@@ -5388,7 +5280,6 @@ app.get('/api/tenants/:id', async (c) => {
     return c.json({ error: 'failed' }, 500);
   }
 });
-
 // SEO suggestions
 app.get('/api/admin/seo/suggestions', async (c) => {
   try {
@@ -5451,7 +5342,6 @@ app.get('/api/admin/seo/suggestions', async (c) => {
     return c.json({ error: 'failed' }, 500);
   }
 });
-
 // SEO: robots.txt per-tenant
 app.get('/robots.txt', async (c) => {
   try {

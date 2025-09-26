@@ -41,7 +41,7 @@ const fetchProfile = async (userId, token) => {
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`profile fetch failed: ${res.status} ${text}`);
-  }
+    }
   return await res.json();
 }
 
@@ -53,8 +53,8 @@ const checkSuperAdmin = async (token) => {
     const j = await res.json();
     return !!j?.isSuperAdmin;
   } catch {
-    return false;
-  }
+        return false;
+    }
 };
 
 const fetchTenantAdmins = async (token) => {

@@ -60,8 +60,17 @@ const SocialFeed = () => {
       return () => clearInterval(t);
     }, [pinnedAds]);
     
+    const forumMode = String(siteSettings?.social_forum_mode || '').toLowerCase();
+
     const fetchPosts = async ({ pageParam = 0 }) => {
-        const url = `/api/shared/posts?page=${pageParam}&size=${POSTS_PER_PAGE}`;
+        const isAdsTab = activeTab === 'ads';
+        const sharedMode = forumMode === 'shared';
+        const baseUrl = sharedMode ? '/api/shared/posts' : '/api/posts';
+        const query = new URLSearchParams({ page: String(pageParam), size: String(POSTS_PER_PAGE) });
+        if (!sharedMode) {
+            query.set('tab', isAdsTab ? 'ads' : 'social');
+        }
+        const url = `${baseUrl}?${query.toString()}`;
         const token = session?.access_token || null;
         const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
         const res = await fetch(url, { headers });
@@ -72,7 +81,8 @@ const SocialFeed = () => {
           if (Array.isArray(r.images)) image_urls = r.images;
           else if (typeof r.images === 'string') { try { image_urls = JSON.parse(r.images || '[]'); } catch { image_urls = []; } }
           const is_pinned = (r.is_pinned !== undefined) ? r.is_pinned : (r.isPinned ? Number(r.isPinned) : 0);
-          return { ...r, image_urls, is_pinned };
+          const is_ad = sharedMode ? Boolean(r.is_ad || r.isAd) : isAdsTab;
+          return { ...r, image_urls, is_pinned, is_ad };
         });
         return {
             data: normalized,
@@ -90,7 +100,7 @@ const SocialFeed = () => {
         status,
         refetch
     } = useInfiniteQuery({
-        queryKey: ['sharedPosts', activeTab, !!user],
+        queryKey: ['socialPosts', forumMode, activeTab, !!user],
         queryFn: fetchPosts,
         initialPageParam: 0,
         getNextPageParam: (lastPage) => lastPage.nextPage,
@@ -105,7 +115,7 @@ const SocialFeed = () => {
      
     const handlePostUpdated = () => {
         // 强制重置分页，确保置顶帖子回到顶部
-        queryClient.removeQueries({ queryKey: ['sharedPosts'] });
+        queryClient.removeQueries({ queryKey: ['socialPosts'] });
         refetch();
     };
  
@@ -164,7 +174,7 @@ const SocialFeed = () => {
                                         transform: `translateY(${v.start}px)`,
                                     }}
                                 >
-                                    <WeChatPostCard key={post.id} post={post} onPostUpdated={handlePostUpdated} onDeletePost={handleDeletePost} />
+                                    <WeChatPostCard key={post.id} post={post} onPostUpdated={handlePostUpdated} onDeletePost={handleDeletePost} forumMode={forumMode} />
                                 </div>
                             );
                         })}
