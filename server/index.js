@@ -4806,7 +4806,7 @@ async function ensureSharedForumSchema() {
     const client = getGlobalClient();
     const statements = [
       "create table if not exists shared_profiles (id text primary key, username text, avatar_url text, created_at text, uid text)",
-      "create table if not exists shared_posts (id integer primary key autoincrement, author_id text not null, content text, images text, is_pinned integer default 0, status text default 'approved', created_at text, updated_at text)",
+      "create table if not exists shared_posts (id integer primary key autoincrement, author_id text not null, content text, images text, is_ad integer default 0, is_pinned integer default 0, status text default 'approved', created_at text, updated_at text)",
       "create table if not exists shared_comments (id integer primary key autoincrement, post_id integer not null, user_id text not null, content text, created_at text)",
       "create table if not exists shared_likes (post_id integer not null, user_id text not null, primary key (post_id, user_id))",
       // indexes

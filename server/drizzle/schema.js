@@ -104,6 +104,7 @@ export const sharedPosts = sqliteTable('shared_posts', {
   authorId: text('author_id').notNull(),
   content: text('content'),
   images: text('images'),
+  isAd: integer('is_ad').default(0),
   isPinned: integer('is_pinned').default(0),
   status: text('status').default('approved'),
   createdAt: text('created_at'),
