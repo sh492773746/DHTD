@@ -3315,22 +3315,35 @@ app.get('/api/shared/posts', async (c) => {
        const likedRows = await db.select({ pid: sharedLikes.postId }).from(sharedLikes).where(and(eq(sharedLikes.userId, userId), inArray(sharedLikes.postId, ids)));
        likedSet = new Set((likedRows || []).map(r => r.pid));
      }
-     for (const r of rows || []) {
-       const lc = await db.select({ c: sql`count(1)` }).from(sharedLikes).where(eq(sharedLikes.postId, r.id));
-       const cc = await db.select({ c: sql`count(1)` }).from(sharedComments).where(eq(sharedComments.postId, r.id));
-       let author = authorMap.get(r.authorId) || null;
-       if (!author) {
-         const base = baseMap.get(r.authorId);
-         if (base) author = base;
-       }
-       withCounts.push({
-         ...r,
-         author,
-         likesCount: Number(lc?.[0]?.c || 0),
-         commentsCount: Number(cc?.[0]?.c || 0),
-         likedByMe: userId ? likedSet.has(r.id) : false,
-       });
-     }
+    for (const r of rows || []) {
+      const lc = await db.select({ c: sql`count(1)` }).from(sharedLikes).where(eq(sharedLikes.postId, r.id));
+      const cc = await db.select({ c: sql`count(1)` }).from(sharedComments).where(eq(sharedComments.postId, r.id));
+      let author = authorMap.get(r.authorId) || baseMap.get(r.authorId) || null;
+      if (!author) {
+        try {
+          const fallback = await db.select({ id: profiles.id, username: profiles.username, avatarUrl: profiles.avatarUrl }).from(profiles).where(eq(profiles.id, r.authorId)).limit(1);
+          const found = fallback?.[0] || null;
+          if (found) {
+            author = { id: found.id, username: found.username || `用户${String(found.id).slice(-4)}`, avatar_url: found.avatarUrl || null };
+          }
+        } catch {}
+      }
+      if (!author) {
+        author = { id: r.authorId, username: `用户${String(r.authorId).slice(-4)}`, avatar_url: null };
+      }
+      const normalizedAuthor = {
+        id: author.id,
+        username: author.username || `用户${String(author.id).slice(-4)}`,
+        avatar_url: author.avatar_url || author.avatarUrl || null,
+      };
+      withCounts.push({
+        ...r,
+        author: normalizedAuthor,
+        likesCount: Number(lc?.[0]?.c || 0),
+        commentsCount: Number(cc?.[0]?.c || 0),
+        likedByMe: userId ? likedSet.has(r.id) : false,
+      });
+    }
      return c.json(withCounts);
   } catch (e) {
     console.error('GET /api/shared/posts error', e);
