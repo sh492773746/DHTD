@@ -4836,6 +4836,8 @@ async function ensureSharedForumSchema() {
       "create index if not exists idx_shared_likes_post on shared_likes(post_id)"
     ];
     for (const s of statements) { try { await client.execute(s); } catch {} }
+    try { await client.execute("alter table shared_posts add column is_ad integer default 0"); } catch {}
+    try { await client.execute("update shared_posts set is_ad = 0 where is_ad is null"); } catch {}
     __ensureCache.shared = true;
   } catch {}
 }
