@@ -5178,7 +5178,9 @@ app.get('/api/embed/cipher', async (c) => {
 app.get('/api/tenant/resolve', async (c) => {
   try {
     const defaultDb = await getTursoClientForTenant(0);
-    const host = (c.get('host') || c.req.header('host') || '').split(':')[0];
+    const headerHost = c.req.header('x-horizons-resolve-host');
+    const hostSource = headerHost || c.get('host') || c.req.header('host') || '';
+    const host = hostSource.split(':')[0];
     const tenantId = await resolveTenantId(defaultDb, host);
     return c.json({ tenantId });
   } catch (e) {
