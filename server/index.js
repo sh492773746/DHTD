@@ -942,20 +942,9 @@ app.get('/api/profile', async (c) => {
     const defaultDb = await getTursoClientForTenant(0);
     const host = (c.get('host') || '').split(':')[0];
     const tenantId = await resolveTenantId(defaultDb, host);
-    const tenantDb = await getTursoClientForTenant(tenantId);
     const globalDb = await getTursoClientForTenant(0);
 
-    // Backward-compat: ensure optional columns exist in both tenant and global profiles
-    try {
-      const rawT = await getLibsqlClientForTenantRaw(tenantId);
-      try { await rawT.execute("alter table profiles add column avatar_url text"); } catch {}
-      try { await rawT.execute("alter table profiles add column tenant_id integer default 0"); } catch {}
-      try { await rawT.execute("alter table profiles add column uid text"); } catch {}
-      try { await rawT.execute("alter table profiles add column invite_code text"); } catch {}
-      try { await rawT.execute("alter table profiles add column virtual_currency integer default 0"); } catch {}
-      try { await rawT.execute("alter table profiles add column invitation_points integer default 0"); } catch {}
-      try { await rawT.execute("alter table profiles add column free_posts_count integer default 0"); } catch {}
-    } catch {}
+    // Backward-compat: ensure optional columns exist in global profiles (single source of truth)
     try {
       const rawG = getGlobalClient();
       try { await rawG.execute("alter table profiles add column avatar_url text"); } catch {}
@@ -967,23 +956,6 @@ app.get('/api/profile', async (c) => {
       try { await rawG.execute("alter table profiles add column free_posts_count integer default 0"); } catch {}
     } catch {}
 
-    // ensure tenant profile exists (for points/virtual currency scoped to tenant)
-    let rowsTenant = await tenantDb.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
-    if (ensure && isSelf && (!rowsTenant || rowsTenant.length === 0)) {
-      const map = await readSettingsMap();
-      await tenantDb.insert(profiles).values({
-        id: userId,
-        username: '用户',
-        tenantId: tenantId,
-        points: toInt(map['new_user_points'], 0),
-        virtualCurrency: toInt(map['initial_virtual_currency'], 0),
-        invitationPoints: 0,
-        freePostsCount: toInt(map['new_user_free_posts'], 0),
-        createdAt: new Date().toISOString()
-      });
-      rowsTenant = await tenantDb.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
-    }
-
     // ensure global profile exists for invite/uid
     let rowsGlobal = await globalDb.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
     if (ensure && isSelf && (!rowsGlobal || rowsGlobal.length === 0)) {
@@ -991,7 +963,6 @@ app.get('/api/profile', async (c) => {
       rowsGlobal = await globalDb.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
     }
 
-    const pTenant = rowsTenant?.[0] || null;
     const pGlobal = rowsGlobal?.[0] || null;
 
     if (pGlobal) {
@@ -1029,24 +1000,18 @@ app.get('/api/profile', async (c) => {
     // compute invitation points strictly for this user from points history (tenant + global)
     let invitationPointsComputed = 0;
     try {
-      const sumRowsT = await tenantDb
-        .select({ total: sql`sum(${pointsHistoryTable.changeAmount})` })
-        .from(pointsHistoryTable)
-        .where(and(eq(pointsHistoryTable.userId, userId), eq(pointsHistoryTable.reason, '邀请好友奖励')))
-        .limit(1);
       const sumRowsG = await globalDb
         .select({ total: sql`sum(${pointsHistoryTable.changeAmount})` })
         .from(pointsHistoryTable)
         .where(and(eq(pointsHistoryTable.userId, userId), eq(pointsHistoryTable.reason, '邀请好友奖励')))
         .limit(1);
-      const totalT = Array.isArray(sumRowsT) && sumRowsT[0] && (sumRowsT[0].total ?? sumRowsT[0].TOTAL ?? sumRowsT[0]['sum'] ?? 0);
       const totalG = Array.isArray(sumRowsG) && sumRowsG[0] && (sumRowsG[0].total ?? sumRowsG[0].TOTAL ?? sumRowsG[0]['sum'] ?? 0);
-      const asNumber = Number(totalT || 0) + Number(totalG || 0);
+      const asNumber = Number(totalG || 0);
       if (Number.isFinite(asNumber)) invitationPointsComputed = asNumber;
     } catch {}
 
-    // compute combined points if needed
-    const combinedPoints = (pTenant?.points || 0) + (pGlobal?.points || 0);
+    // combined points derived purely from global profile
+    const combinedPoints = pGlobal?.points || 0;
 
     if (scope === 'global' && pGlobal) {
       return c.json({
@@ -1062,8 +1027,8 @@ app.get('/api/profile', async (c) => {
       });
     }
 
-    if (scope === 'combined' && (pTenant || pGlobal)) {
-      const base = pTenant || pGlobal;
+    if (scope === 'combined' && pGlobal) {
+      const base = pGlobal;
       return c.json({
         ...base,
         points: combinedPoints,
@@ -1077,24 +1042,6 @@ app.get('/api/profile', async (c) => {
         invited_users_count: invitedUsersCount,
         combined_points: combinedPoints
       });
-    }
-
-    if (pTenant) {
-      const compat = {
-        ...pTenant,
-        // prefer tenant-scoped values
-        avatar_url: pTenant.avatarUrl,
-        tenant_id: pTenant.tenantId,
-        virtual_currency: pTenant.virtualCurrency,
-        invitation_points: invitationPointsComputed,
-        free_posts_count: pTenant.freePostsCount,
-        invited_users_count: invitedUsersCount,
-        // merge global-only codes
-        uid: rereadGlobal?.uid || pTenant.uid,
-        invite_code: rereadGlobal?.inviteCode || pTenant.inviteCode,
-        combined_points: combinedPoints,
-      };
-      return c.json(compat);
     }
 
     // fallback to global-only data if tenant profile is missing and not ensured
@@ -2035,14 +1982,6 @@ app.put('/api/admin/users/:id', async (c) => {
     }
 
     // Load identity (global) + business (current tenant) to return normalized record
-    const globalRow = (await gdb.select().from(profiles).where(eq(profiles.id, targetId)).limit(1))?.[0];
-    const tdb = await getTursoClientForTenant(resolvedTenantId);
-    // ensure business columns exist in tenant
-    try { const raw = await getLibsqlClientForTenantRaw(resolvedTenantId); await raw.execute("alter table profiles add column virtual_currency integer default 0"); } catch {}
-    try { const raw = await getLibsqlClientForTenantRaw(resolvedTenantId); await raw.execute("alter table profiles add column invitation_points integer default 0"); } catch {}
-    try { const raw = await getLibsqlClientForTenantRaw(resolvedTenantId); await raw.execute("alter table profiles add column free_posts_count integer default 0"); } catch {}
-    let tenantRow = (await tdb.select().from(profiles).where(eq(profiles.id, targetId)).limit(1))?.[0] || null;
-
     const superRows2 = await gdb.select().from(adminUsersTable);
     const superSet2 = new Set((superRows2 || []).map(r => r.userId));
     const allTenantAdminRows2 = await gdb.select().from(tenantAdminsTable);
@@ -2060,17 +1999,18 @@ app.put('/api/admin/users/:id', async (c) => {
     const tenantIds2 = (adminTenantsByUser2.get(targetId) || []).filter(id => aliveTenantIds2.has(Number(id)));
     const domains2 = tenantIds2.map(id => idToDomain2.get(Number(id))).filter(Boolean);
 
+    const globalRow = (await gdb.select().from(profiles).where(eq(profiles.id, targetId)).limit(1))?.[0];
     const normalized = {
       id: targetId,
-      uid: globalRow?.uid || tenantRow?.uid || null,
-      username: globalRow?.username || tenantRow?.username || '',
-      avatar_url: globalRow?.avatarUrl || tenantRow?.avatarUrl || null,
-      tenant_id: tenantRow?.tenantId ?? resolvedTenantId,
-      points: tenantRow?.points ?? 0,
-      virtual_currency: tenantRow?.virtualCurrency ?? 0,
-      invitation_points: tenantRow?.invitationPoints ?? 0,
-      free_posts_count: tenantRow?.freePostsCount ?? 0,
-      created_at: tenantRow?.createdAt || globalRow?.createdAt || null,
+      uid: globalRow?.uid || null,
+      username: globalRow?.username || '',
+      avatar_url: globalRow?.avatarUrl || null,
+      tenant_id: resolvedTenantId,
+      points: globalRow?.points ?? 0,
+      virtual_currency: globalRow?.virtualCurrency ?? 0,
+      invitation_points: globalRow?.invitationPoints ?? 0,
+      free_posts_count: globalRow?.freePostsCount ?? 0,
+      created_at: globalRow?.createdAt || null,
       is_super_admin: superSet2.has(targetId),
       is_tenant_admin: (tenantIds2.length > 0),
       tenant_admin_tenants: tenantIds2,
@@ -2098,32 +2038,29 @@ app.put('/api/admin/users/:id/stats', async (c) => {
     const host = c.get('host').split(':')[0];
     const tenantId = Number(body?.tenant_id ?? (await resolveTenantId(defaultDb, host)));
 
-    const tdb = await getTursoClientForTenant(tenantId);
-    // ensure row exists
-    let row = (await tdb.select().from(profiles).where(eq(profiles.id, targetId)).limit(1))?.[0];
-    const nowIso = new Date().toISOString();
-    if (!row) {
-      await tdb.insert(profiles).values({ id: targetId, username: '用户', tenantId, points: 0, virtualCurrency: 0, freePostsCount: 0, createdAt: nowIso });
-      row = (await tdb.select().from(profiles).where(eq(profiles.id, targetId)).limit(1))?.[0];
-    }
-
     const updates = {};
     if (body.points !== undefined) updates.points = Math.max(0, Number(body.points || 0));
     if (body.virtual_currency !== undefined) updates.virtualCurrency = Math.max(0, Number(body.virtual_currency || 0));
     if (body.free_posts_count !== undefined) updates.freePostsCount = Math.max(0, Number(body.free_posts_count || 0));
 
     if (Object.keys(updates).length > 0) {
-      await tdb.update(profiles).set(updates).where(eq(profiles.id, targetId));
+      const nowIso = new Date().toISOString();
+      updates.updatedAt = nowIso;
+      const existing = await gdb.select().from(profiles).where(eq(profiles.id, targetId)).limit(1);
+      if (!existing || existing.length === 0) {
+        await gdb.insert(profiles).values({ id: targetId, username: '用户', tenantId: 0, points: 0, virtualCurrency: 0, freePostsCount: 0, createdAt: nowIso });
+      }
+      await gdb.update(profiles).set(updates).where(eq(profiles.id, targetId));
     }
 
-    const updated = (await tdb.select().from(profiles).where(eq(profiles.id, targetId)).limit(1))?.[0];
+    const updated = (await gdb.select().from(profiles).where(eq(profiles.id, targetId)).limit(1))?.[0];
     return c.json({
       id: targetId,
       tenant_id: tenantId,
       points: updated?.points ?? 0,
       virtual_currency: updated?.virtualCurrency ?? 0,
       free_posts_count: updated?.freePostsCount ?? 0,
-      created_at: updated?.createdAt || row?.createdAt || nowIso,
+      created_at: updated?.createdAt || updated?.created_at || null,
     });
   } catch (e) {
     console.error('PUT /api/admin/users/:id/stats error', e);
@@ -3611,35 +3548,21 @@ app.get('/api/points/history', async (c) => {
     if (!userId) return c.json([], 401);
     const defaultDb = await getTursoClientForTenant(0);
     const host = c.get('host').split(':')[0];
-    const tenantId = await resolveTenantId(defaultDb, host);
-    const dbTenant = await getTursoClientForTenant(tenantId);
-    const dbGlobal = await getTursoClientForTenant(0);
-    // ensure table exists in both scopes
-    try {
-      if (!__ensureCache.pointsHistory.has(Number(tenantId))) {
-        const raw = await getLibsqlClientForTenantRaw(tenantId);
-        try { await raw.execute("create table if not exists points_history (id integer primary key autoincrement, user_id text not null, change_amount integer not null, reason text not null, created_at text default (datetime('now')))"); } catch {}
-        __ensureCache.pointsHistory.add(Number(tenantId));
-      }
-    } catch {}
+    // 使用全局数据库，主站和分站共享积分历史
+    const gdb = getGlobalDb();
+    
+    // ensure table exists in global DB
     try {
       if (!__ensureCache.pointsHistory.has(0)) {
-        const raw = await getLibsqlClientForTenantRaw(0);
+        const raw = getGlobalClient();
         try { await raw.execute("create table if not exists points_history (id integer primary key autoincrement, user_id text not null, change_amount integer not null, reason text not null, created_at text default (datetime('now')))"); } catch {}
         __ensureCache.pointsHistory.add(0);
       }
     } catch {}
-    const rowsTenant = await dbTenant.select().from(pointsHistoryTable).where(eq(pointsHistoryTable.userId, userId));
-    const rowsGlobal = await dbGlobal.select().from(pointsHistoryTable).where(eq(pointsHistoryTable.userId, userId));
-    const mappedTenant = (rowsTenant || []).map(r => ({
-      id: r.id,
-      user_id: r.userId,
-      change_amount: r.changeAmount,
-      reason: r.reason,
-      created_at: r.createdAt,
-      scope: 'tenant',
-    }));
-    const mappedGlobal = (rowsGlobal || []).map(r => ({
+    
+    // 只从全局数据库读取积分历史
+    const rows = await gdb.select().from(pointsHistoryTable).where(eq(pointsHistoryTable.userId, userId));
+    const mapped = (rows || []).map(r => ({
       id: r.id,
       user_id: r.userId,
       change_amount: r.changeAmount,
@@ -3647,12 +3570,15 @@ app.get('/api/points/history', async (c) => {
       created_at: r.createdAt,
       scope: 'global',
     }));
-    const all = [...mappedTenant, ...mappedGlobal].sort((a, b) => {
+    
+    // 按时间倒序排列
+    const sorted = mapped.sort((a, b) => {
       const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
       const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
       return tb - ta;
     });
-    return c.json(all);
+    
+    return c.json(sorted);
   } catch (e) {
     console.error('GET /api/points/history error', e);
     return c.json([]);
@@ -3666,36 +3592,53 @@ app.post('/api/points/exchange', async (c) => {
     if (!userId) return c.json({ error: 'unauthorized' }, 401);
     const { mode, pointsAmount, currencyAmount } = await c.req.json();
     if (!mode || (!pointsAmount && !currencyAmount)) return c.json({ error: 'invalid' }, 400);
-    const defaultDb = await getTursoClientForTenant(0);
-    const host = c.get('host').split(':')[0];
-    const tenantId = await resolveTenantId(defaultDb, host);
-    const db = await getTursoClientForTenant(tenantId);
-    // ensure columns
-    try { const raw = await getLibsqlClientForTenantRaw(tenantId); await raw.execute("alter table profiles add column virtual_currency integer default 0"); } catch {}
-    try { const raw = await getLibsqlClientForTenantRaw(tenantId); await raw.execute("alter table profiles add column invitation_points integer default 0"); } catch {}
-    try { const raw = await getLibsqlClientForTenantRaw(tenantId); await raw.execute("alter table profiles add column free_posts_count integer default 0"); } catch {}
-    try { const raw = await getLibsqlClientForTenantRaw(tenantId); await raw.execute("create table if not exists points_history (id integer primary key autoincrement, user_id text not null, change_amount integer not null, reason text not null, created_at text default (datetime('now')))" ); } catch {}
+    
+    // 使用全局数据库确保主站和分站积分同步
+    const gdb = getGlobalDb();
+    
+    // ensure columns in global DB
+    try { 
+      const raw = getGlobalClient();
+      await raw.execute("alter table profiles add column virtual_currency integer default 0"); 
+    } catch {}
+    try { 
+      const raw = getGlobalClient();
+      await raw.execute("alter table profiles add column invitation_points integer default 0"); 
+    } catch {}
+    try { 
+      const raw = getGlobalClient();
+      await raw.execute("alter table profiles add column free_posts_count integer default 0"); 
+    } catch {}
+    try { 
+      const raw = getGlobalClient();
+      await raw.execute("create table if not exists points_history (id integer primary key autoincrement, user_id text not null, change_amount integer not null, reason text not null, created_at text default (datetime('now')))" ); 
+    } catch {}
+    
     const now = new Date().toISOString();
-    const prof = (await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1))?.[0];
+    const prof = (await gdb.select().from(profiles).where(eq(profiles.id, userId)).limit(1))?.[0];
     if (!prof) return c.json({ error: 'profile-not-found' }, 404);
+    
     if (mode === 'pointsToCurrency') {
       const p = Number(pointsAmount) || 0;
       const cny = Number(currencyAmount) || 0;
       if (p <= 0 || cny <= 0) return c.json({ error: 'invalid-amount' }, 400);
       if ((prof.points || 0) < p) return c.json({ error: 'insufficient-points' }, 400);
-      await db.update(profiles).set({ points: (prof.points || 0) - p, virtualCurrency: (prof.virtualCurrency || 0) + cny }).where(eq(profiles.id, userId));
-      await db.insert(pointsHistoryTable).values({ userId, changeAmount: -p, reason: '兑换虚拟分', createdAt: now });
+      // 从全局数据库更新
+      await gdb.update(profiles).set({ points: (prof.points || 0) - p, virtualCurrency: (prof.virtualCurrency || 0) + cny }).where(eq(profiles.id, userId));
+      await gdb.insert(pointsHistoryTable).values({ userId, changeAmount: -p, reason: '兑换虚拟分', createdAt: now });
     } else if (mode === 'currencyToPoints') {
       const cny = Number(currencyAmount) || 0;
       const p = Number(pointsAmount) || 0;
       if (p <= 0 || cny <= 0) return c.json({ error: 'invalid-amount' }, 400);
       if ((prof.virtualCurrency || 0) < cny) return c.json({ error: 'insufficient-currency' }, 400);
-      await db.update(profiles).set({ points: (prof.points || 0) + p, virtualCurrency: (prof.virtualCurrency || 0) - cny }).where(eq(profiles.id, userId));
-      await db.insert(pointsHistoryTable).values({ userId, changeAmount: +p, reason: '虚拟分兑入', createdAt: now });
+      // 从全局数据库更新
+      await gdb.update(profiles).set({ points: (prof.points || 0) + p, virtualCurrency: (prof.virtualCurrency || 0) - cny }).where(eq(profiles.id, userId));
+      await gdb.insert(pointsHistoryTable).values({ userId, changeAmount: +p, reason: '虚拟分兑入', createdAt: now });
     } else {
       return c.json({ error: 'unsupported-mode' }, 400);
     }
-    const updated = (await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1))?.[0];
+    
+    const updated = (await gdb.select().from(profiles).where(eq(profiles.id, userId)).limit(1))?.[0];
     return c.json({ ok: true, profile: updated });
   } catch (e) {
     console.error('POST /api/points/exchange error', e);
@@ -3827,14 +3770,17 @@ app.post('/api/shop/redeem', async (c) => {
     // permission: allow tenant purchase for global (tenantId=0) or same-tenant products
     if (product.tenantId !== 0 && Number(product.tenantId) !== Number(tenantId)) return c.json({ error: 'forbidden' }, 403);
 
-    // deduct points from tenant profile
-    const prof = (await dbTenant.select().from(profiles).where(eq(profiles.id, userId)).limit(1))?.[0];
+    // deduct points from GLOBAL profile (主站和分站共用积分)
+    const gdb = getGlobalDb();
+    const prof = (await gdb.select().from(profiles).where(eq(profiles.id, userId)).limit(1))?.[0];
     if (!prof) return c.json({ error: 'profile-not-found' }, 404);
     if ((prof.points || 0) < product.price) return c.json({ error: 'insufficient-points' }, 400);
     if (product.stock !== -1 && product.stock <= 0) return c.json({ error: 'out-of-stock' }, 400);
 
-    await dbTenant.update(profiles).set({ points: (prof.points || 0) - product.price }).where(eq(profiles.id, userId));
-    await dbTenant.insert(pointsHistoryTable).values({ userId, changeAmount: -product.price, reason: '积分商城兑换', createdAt: now });
+    // 从全局数据库扣除积分
+    await gdb.update(profiles).set({ points: (prof.points || 0) - product.price }).where(eq(profiles.id, userId));
+    // 在全局数据库记录积分历史
+    await gdb.insert(pointsHistoryTable).values({ userId, changeAmount: -product.price, reason: '积分商城兑换', createdAt: now });
 
     // ensure snapshot columns exist for redemptions (tenant DB)
     try {
@@ -4252,13 +4198,16 @@ app.post('/api/points/checkin', async (c) => {
     const defaultDb = await getTursoClientForTenant(0);
     const host = c.get('host').split(':')[0];
     const tenantId = await resolveTenantId(defaultDb, host);
-    const db = await getTursoClientForTenant(tenantId);
+    
+    // 使用全局数据库来确保主站和分站积分同步
+    const gdb = getGlobalDb();
 
     // Shanghai timezone date compare
     const fmtDate = (d) => new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
     const todayStr = fmtDate(new Date());
 
-    const history = await db.select().from(pointsHistoryTable).where(eq(pointsHistoryTable.userId, userId));
+    // 从全局数据库检查签到历史
+    const history = await gdb.select().from(pointsHistoryTable).where(eq(pointsHistoryTable.userId, userId));
     const doneToday = (history || []).some(h => {
       try { return fmtDate(new Date(h.createdAt)) === todayStr && h.reason === '每日签到'; } catch { return false; }
     });
@@ -4266,14 +4215,18 @@ app.post('/api/points/checkin', async (c) => {
 
     const map = await readSettingsMap();
     const reward = toInt(map['daily_login_reward'], 10);
-    const prof = (await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1))?.[0];
+    
+    // 从全局数据库获取和更新积分
+    const prof = (await gdb.select().from(profiles).where(eq(profiles.id, userId)).limit(1))?.[0];
     if (!prof) {
-      // auto-create tenant profile if missing
-      await db.insert(profiles).values({ id: userId, username: '用户', tenantId, points: reward, createdAt: new Date().toISOString() });
+      // auto-create global profile if missing
+      await gdb.insert(profiles).values({ id: userId, username: '用户', tenantId: 0, points: reward, createdAt: new Date().toISOString() });
     } else {
-      await db.update(profiles).set({ points: (prof?.points || 0) + reward }).where(eq(profiles.id, userId));
+      await gdb.update(profiles).set({ points: (prof?.points || 0) + reward }).where(eq(profiles.id, userId));
     }
-    await db.insert(pointsHistoryTable).values({ userId, changeAmount: reward, reason: '每日签到', createdAt: new Date().toISOString() });
+    
+    // 在全局数据库记录积分历史
+    await gdb.insert(pointsHistoryTable).values({ userId, changeAmount: reward, reason: '每日签到', createdAt: new Date().toISOString() });
     return c.json({ ok: true, reward });
   } catch (e) {
     console.error('POST /api/points/checkin error', e);
@@ -4288,25 +4241,31 @@ app.post('/api/points/reward/invite', async (c) => {
     const defaultDb = await getTursoClientForTenant(0);
     const host = c.get('host').split(':')[0];
     const tenantId = await resolveTenantId(defaultDb, host);
-    const db = await getTursoClientForTenant(tenantId);
+    
+    // 使用全局数据库确保主站和分站积分同步
+    const gdb = getGlobalDb();
     const now = new Date().toISOString();
-    // idempotent: only reward once per (inviter, invitee)
-    const exists = await db.select().from(invitations).where(and(eq(invitations.inviteeId, inviteeId), eq(invitations.inviterId, userId))).limit(1);
+    
+    // idempotent: only reward once per (inviter, invitee) - 从全局数据库检查
+    const exists = await gdb.select().from(invitations).where(and(eq(invitations.inviteeId, inviteeId), eq(invitations.inviterId, userId))).limit(1);
     if (exists && exists.length > 0) return c.json({ ok: false, reason: 'duplicate' });
+    
     const map = await readSettingsMap();
     const reward = toInt(map['invite_reward_points'], 50);
-    await db.insert(invitations).values({ tenantId, inviteeId, inviterId: userId, createdAt: now });
-    // also record in global database for unified analytics
-    try {
-      const g = await getTursoClientForTenant(0);
-      const existsG = await g.select().from(invitations).where(and(eq(invitations.inviteeId, inviteeId), eq(invitations.inviterId, userId))).limit(1);
-      if (!existsG || existsG.length === 0) {
-        await g.insert(invitations).values({ tenantId, inviteeId, inviterId: userId, createdAt: now });
-      }
-    } catch {}
-    const prof = (await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1))?.[0];
-    await db.update(profiles).set({ points: (prof?.points || 0) + reward, invitationPoints: (prof?.invitationPoints || 0) + reward }).where(eq(profiles.id, userId));
-    await db.insert(pointsHistoryTable).values({ userId, changeAmount: reward, reason: '邀请好友奖励', createdAt: now });
+    
+    // 在全局数据库记录邀请关系
+    await gdb.insert(invitations).values({ tenantId, inviteeId, inviterId: userId, createdAt: now });
+    
+    // 从全局数据库更新积分
+    const prof = (await gdb.select().from(profiles).where(eq(profiles.id, userId)).limit(1))?.[0];
+    await gdb.update(profiles).set({ 
+      points: (prof?.points || 0) + reward, 
+      invitationPoints: (prof?.invitationPoints || 0) + reward 
+    }).where(eq(profiles.id, userId));
+    
+    // 在全局数据库记录积分历史
+    await gdb.insert(pointsHistoryTable).values({ userId, changeAmount: reward, reason: '邀请好友奖励', createdAt: now });
+    
     return c.json({ ok: true, reward });
   } catch (e) {
     console.error('POST /api/points/reward/invite error', e);
