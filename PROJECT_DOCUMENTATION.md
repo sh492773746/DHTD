@@ -243,7 +243,9 @@ activeTenantId = 1
 │   ├── /admin/saas            // SaaS 租戶管理
 │   ├── /admin/databases       // 數據庫管理
 │   ├── /admin/shop            // 商城管理
-│   └── /admin/seo             // SEO 設置
+│   ├── /admin/seo             // SEO 設置
+│   ├── /admin/api-monitor     // API 監控（健康檢查、日誌）
+│   └── /admin/api-docs        // API 使用文檔
 │
 └── /tenant-admin (TenantAdminRoute)  // 租戶管理員後台
     ├── /tenant-admin          // 租戶儀表板
