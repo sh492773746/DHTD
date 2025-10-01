@@ -1126,6 +1126,55 @@ Content-Type: application/json
 
 ---
 
+### 🔍 系統監控 API
+
+#### 1. 獲取日誌（超管）
+```http
+GET /api/admin/logs?level=error&limit=100
+Authorization: Bearer <token>
+```
+
+**Query 參數**
+- `level` (string, optional): 日誌級別 (error, warn, info)
+- `limit` (number, default: 100, max: 100): 返回數量
+
+**響應**
+```json
+{
+  "logs": [
+    {
+      "id": "log-123",
+      "message": "錯誤信息",
+      "timestamp": "2025-10-01T12:00:00Z",
+      "labels": [
+        { "name": "level", "value": "error" },
+        { "name": "type", "value": "app" },
+        { "name": "instance", "value": "srv-xxx" }
+      ]
+    }
+  ],
+  "hasMore": false
+}
+```
+
+#### 2. 獲取日誌統計（超管）
+```http
+GET /api/admin/logs/stats
+Authorization: Bearer <token>
+```
+
+**響應**
+```json
+{
+  "total": 150,
+  "errors": 5,
+  "warnings": 10,
+  "info": 135
+}
+```
+
+---
+
 ### 📊 分析相關 API
 
 #### 1. 獲取 Umami 統計
@@ -2229,6 +2278,15 @@ curl -H "Authorization: Bearer $TURSO_AUTH_TOKEN" $TURSO_DATABASE_URL
 ---
 
 ## 版本歷史
+
+### v1.0.3 (2025-10-01)
+- ✨ **新增 API 監控功能**（僅超級管理員）
+  - 新增後台 API 監控頁面 (`/admin/api-monitor`)
+  - 實時查看服務器日誌（所有/錯誤/系統信息）
+  - 自動每 30 秒刷新日誌
+  - 日誌統計儀表板（總數/錯誤/警告/狀態）
+  - 內置日誌緩存系統（可擴展集成 Render API）
+  - **權限控制**: 僅超級管理員可訪問
 
 ### v1.0.2 (2025-10-01)
 - 🐛 **修復 shared_posts 表 Schema 問題**

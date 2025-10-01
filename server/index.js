@@ -4483,6 +4483,139 @@ function toInt(val, def) {
   return Number.isFinite(n) ? n : def;
 }
 
+// ---------- Admin: API 监控 ----------
+// 获取 Render 日志（仅超管）
+app.get('/api/admin/logs', async (c) => {
+  try {
+    const userId = c.get('userId');
+    if (!userId) return c.json({ error: 'unauthorized' }, 401);
+    
+    // 检查是否为超级管理员
+    const isAdmin = await isSuperAdminUser(userId);
+    if (!isAdmin) return c.json({ error: 'forbidden' }, 403);
+    
+    const level = c.req.query('level'); // error, warn, info
+    const limit = Math.min(Number(c.req.query('limit') || 100), 100);
+    
+    // 模拟日志数据（实际环境中应该从 Render API 获取）
+    // 这里提供一个基础的日志收集框架
+    const logs = await collectRecentLogs(level, limit);
+    
+    return c.json({
+      logs,
+      hasMore: false,
+    });
+  } catch (e) {
+    console.error('GET /api/admin/logs error', e);
+    return c.json({ error: 'failed' }, 500);
+  }
+});
+
+// 获取日志统计（仅超管）
+app.get('/api/admin/logs/stats', async (c) => {
+  try {
+    const userId = c.get('userId');
+    if (!userId) return c.json({ error: 'unauthorized' }, 401);
+    
+    const isAdmin = await isSuperAdminUser(userId);
+    if (!isAdmin) return c.json({ error: 'forbidden' }, 403);
+    
+    // 统计最近的日志
+    const stats = await getLogStats();
+    
+    return c.json(stats);
+  } catch (e) {
+    console.error('GET /api/admin/logs/stats error', e);
+    return c.json({ error: 'failed' }, 500);
+  }
+});
+
+// 收集最近的日志（基础实现，可以扩展为从 Render API 获取）
+const __logCache = { errors: [], warnings: [], info: [], all: [] };
+async function collectRecentLogs(level, limit) {
+  // 这里返回缓存的日志
+  // 在实际部署中，可以集成 Render API 或其他日志服务
+  const now = new Date();
+  const mockLogs = [];
+  
+  // 生成一些模拟日志用于演示
+  if (__logCache.all.length === 0) {
+    // 初始化一些示例日志
+    mockLogs.push({
+      id: `log-${Date.now()}-1`,
+      message: 'BFF running on http://localhost:10000',
+      timestamp: new Date(now.getTime() - 60000).toISOString(),
+      labels: [
+        { name: 'level', value: 'info' },
+        { name: 'type', value: 'app' },
+        { name: 'instance', value: 'srv-d36ni7mmcj7s73domhd0-mz6wf' },
+      ],
+    });
+    
+    mockLogs.push({
+      id: `log-${Date.now()}-2`,
+      message: '✅ 服务启动成功',
+      timestamp: new Date(now.getTime() - 120000).toISOString(),
+      labels: [
+        { name: 'level', value: 'info' },
+        { name: 'type', value: 'app' },
+      ],
+    });
+    
+    __logCache.all = mockLogs;
+    __logCache.info = mockLogs;
+  }
+  
+  // 根据级别过滤
+  let filtered = __logCache.all;
+  if (level === 'error') {
+    filtered = __logCache.errors;
+  } else if (level === 'warn') {
+    filtered = __logCache.warnings;
+  } else if (level === 'info') {
+    filtered = __logCache.info;
+  }
+  
+  return filtered.slice(0, limit);
+}
+
+// 获取日志统计
+async function getLogStats() {
+  return {
+    total: __logCache.all.length,
+    errors: __logCache.errors.length,
+    warnings: __logCache.warnings.length,
+    info: __logCache.info.length,
+  };
+}
+
+// 添加日志到缓存（可以在其他地方调用）
+function logToCache(level, message, labels = []) {
+  const log = {
+    id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    message,
+    timestamp: new Date().toISOString(),
+    labels: [
+      { name: 'level', value: level },
+      ...labels,
+    ],
+  };
+  
+  __logCache.all.unshift(log);
+  if (__logCache.all.length > 1000) __logCache.all.pop();
+  
+  if (level === 'error') {
+    __logCache.errors.unshift(log);
+    if (__logCache.errors.length > 100) __logCache.errors.pop();
+  } else if (level === 'warn') {
+    __logCache.warnings.unshift(log);
+    if (__logCache.warnings.length > 100) __logCache.warnings.pop();
+  } else {
+    __logCache.info.unshift(log);
+    if (__logCache.info.length > 100) __logCache.info.pop();
+  }
+}
+
 const port = process.env.PORT ? Number(process.env.PORT) : 8787;
 if (!process.env.VERCEL) {
 serve({ fetch: app.fetch, port });

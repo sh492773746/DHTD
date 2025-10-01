@@ -11,6 +11,7 @@ import {
   ShoppingBag,
   Wand2,
   Database,
+  Activity,
 } from 'lucide-react';
 
 export const mainNavItems = [
@@ -45,6 +46,12 @@ export const adminNavItems = [
     items: [
       { to: '/admin/saas', label: '分站管理', icon: Globe },
       { to: '/admin/databases', label: '数据库管理', icon: Database },
+    ],
+  },
+  {
+    title: '系统监控',
+    items: [
+      { to: '/admin/api-monitor', label: 'API 监控', icon: Activity },
     ],
   },
 ];
