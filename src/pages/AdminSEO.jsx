@@ -532,7 +532,7 @@ const AdminSEO = () => {
 
           {/* 社交媒體設置標籤頁 */}
           <TabsContent value="social" className="space-y-4">
-            <Card>
+      <Card>
               <CardHeader>
                 <CardTitle>Open Graph 設置</CardTitle>
                 <CardDescription>
@@ -1019,9 +1019,9 @@ const AdminSEO = () => {
                           >
                             訪問 →
                           </Button>
-                        </div>
+              </div>
                         <div className="flex items-center justify-between p-3 bg-gray-50 rounded hover:bg-gray-100 transition">
-                          <div>
+              <div>
                             <div className="font-medium">SEMrush</div>
                             <div className="text-xs text-gray-500">綜合 SEO 分析工具</div>
                           </div>
@@ -1061,7 +1061,7 @@ const AdminSEO = () => {
                         </div>
                       </div>
                     </div>
-                  </div>
+              </div>
                 </ScrollArea>
               </CardContent>
             </Card>
@@ -1144,13 +1144,13 @@ const AdminSEO = () => {
                   正在分析您的網站 SEO 狀態...
                 </div>
               </div>
-            </CardContent>
-          </Card>
+        </CardContent>
+      </Card>
         )}
       </div>
     </>
   );
 };
 
-export default AdminSEO;
+export default AdminSEO; 
 

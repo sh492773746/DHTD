@@ -46,6 +46,29 @@ app.use('*', async (c, next) => {
 // Compression
 app.use('*', compress());
 
+// 🔒 安全：請求體大小限制（防止 DoS 攻擊）
+app.use('*', async (c, next) => {
+  const contentLength = Number(c.req.header('content-length') || 0);
+  const MAX_BODY_SIZE = 15 * 1024 * 1024; // 15MB（考慮圖片上傳）
+  
+  // 跳過特定路徑（如分塊上傳）
+  const path = c.req.path || '';
+  if (path.startsWith('/api/uploads/resumable')) {
+    await next();
+    return;
+  }
+  
+  if (contentLength > 0 && contentLength > MAX_BODY_SIZE) {
+    return c.json({ 
+      error: '請求體過大',
+      maxSize: '15MB',
+      receivedSize: `${Math.round(contentLength / 1024 / 1024)}MB`
+    }, 413);
+  }
+  
+  await next();
+});
+
 // CORS allowlist (env-driven)
 const ROOT = process.env.NEXT_PUBLIC_ROOT_DOMAIN || process.env.ROOT_DOMAIN || '';
 const RAW_ALLOWED = process.env.ALLOWED_ORIGINS || '';
@@ -141,6 +164,33 @@ const __chunkLimiter = async (c, next) => {
 function __isAllowedImage(type) {
   const t = String(type || '').toLowerCase();
   return t === 'image/jpeg' || t === 'image/png' || t === 'image/webp' || t === 'image/gif';
+}
+
+// 🔒 安全：驗證文件實際內容是否為圖片
+async function __validateImageBuffer(buffer, declaredType) {
+  try {
+    const metadata = await sharp(buffer).metadata();
+    
+    // 驗證實際格式
+    const allowedFormats = ['jpeg', 'png', 'webp', 'gif'];
+    if (!allowedFormats.includes(metadata.format)) {
+      return { valid: false, error: '無效的圖片格式' };
+    }
+    
+    // 檢查圖片尺寸（防止過大圖片DoS）
+    if (metadata.width > 8000 || metadata.height > 8000) {
+      return { valid: false, error: '圖片尺寸過大（最大 8000x8000）' };
+    }
+    
+    // 檢查是否為動畫圖片
+    if (metadata.pages && metadata.pages > 1 && metadata.pages > 100) {
+      return { valid: false, error: '動畫幀數過多' };
+    }
+    
+    return { valid: true, metadata };
+  } catch (e) {
+    return { valid: false, error: '無效的圖片文件' };
+  }
 }
 function __setCache(c, seconds) {
   c.header('Cache-Control', `public, max-age=${seconds}, stale-while-revalidate=${seconds * 5}`);
@@ -404,7 +454,8 @@ app.use('*', async (c, next) => {
         const id = await supabaseIntrospectUser(token);
         if (id) userId = id;
       }
-      if (!userId && (process.env.NODE_ENV !== 'production' || process.env.ALLOW_JWT_DECODE_FALLBACK === '1')) {
+      // 🔒 安全加固：僅在開發環境允許 decode fallback
+      if (!userId && process.env.NODE_ENV === 'development') {
         try {
           const payload = decodeJwt(token);
           if (!supabaseIssuer || !payload?.iss || String(payload.iss).startsWith(supabaseIssuer)) {
@@ -414,7 +465,8 @@ app.use('*', async (c, next) => {
       }
       if (userId) __setCachedUserIdForToken(token, userId);
     } catch {
-      if (process.env.NODE_ENV !== 'production' || process.env.ALLOW_JWT_DECODE_FALLBACK === '1') {
+      // 🔒 安全加固：生產環境不允許降級驗證
+      if (process.env.NODE_ENV === 'development') {
         try {
           const payload = decodeJwt(token);
           if (!supabaseIssuer || !payload?.iss || String(payload.iss).startsWith(supabaseIssuer)) {
@@ -664,6 +716,13 @@ app.post('/api/uploads/post-images', async (c) => {
       const safeName = (file.name || 'image').replace(/[^a-zA-Z0-9._-]/g, '_');
       const objectPath = `${userId}/${Date.now()}_${safeName}`;
       const buf = Buffer.from(await file.arrayBuffer());
+      
+      // 🔒 安全：驗證文件實際內容
+      const validation = await __validateImageBuffer(buf, file.type);
+      if (!validation.valid) {
+        return c.json({ error: validation.error }, 400);
+      }
+      
       let outBuf = buf;
       try {
         const type = String(file.type || '').toLowerCase();
@@ -724,6 +783,13 @@ app.post('/api/uploads/avatar', async (c) => {
     const safeName = (file.name || 'avatar').replace(/[^a-zA-Z0-9._-]/g, '_');
     const objectPath = `${userId}/${Date.now()}_${safeName}`;
     const buf = Buffer.from(await file.arrayBuffer());
+    
+    // 🔒 安全：驗證文件實際內容
+    const validation = await __validateImageBuffer(buf, file.type);
+    if (!validation.valid) {
+      return c.json({ error: validation.error }, 400);
+    }
+    
     let outBuf = buf;
     try {
       const type = String(file.type || '').toLowerCase();

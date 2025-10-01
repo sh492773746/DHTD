@@ -247,18 +247,17 @@ export default defineConfig({
 		},
 	},
 	define: {
+		// 🔒 安全：只注入公開的環境變量到前端
+		// 注意：這些變量會被編譯到前端代碼，任何人都可以看到
 		'import.meta.env.NEXT_PUBLIC_ROOT_DOMAIN': JSON.stringify(process.env.NEXT_PUBLIC_ROOT_DOMAIN),
 		'import.meta.env.NEXT_PUBLIC_SUPABASE_URL': JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_URL),
 		'import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY': JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
-		'import.meta.env.SUPABASE_SERVICE_ROLE_KEY': JSON.stringify(process.env.SUPABASE_SERVICE_ROLE_KEY),
-		'import.meta.env.DATABASE_URL': JSON.stringify(process.env.DATABASE_URL),
-		'import.meta.env.TURSO_DATABASE_URL': JSON.stringify(process.env.TURSO_DATABASE_URL),
-		'import.meta.env.TURSO_PRIMARY_URL': JSON.stringify(process.env.TURSO_PRIMARY_URL),
-		'import.meta.env.TURSO_NEAREST_URL': JSON.stringify(process.env.TURSO_NEAREST_URL),
-		'import.meta.env.TURSO_AUTH_TOKEN': JSON.stringify(process.env.TURSO_AUTH_TOKEN),
-		'import.meta.env.TURSO_DB_NAME': JSON.stringify(process.env.TURSO_DB_NAME),
-		'import.meta.env.TURSO_API_TOKEN': JSON.stringify(process.env.TURSO_API_TOKEN),
-		'import.meta.env.TURSO_TENANT_REGION': JSON.stringify(process.env.TURSO_TENANT_REGION),
-		'import.meta.env.TURSO_ORG': JSON.stringify(process.env.TURSO_ORG),
+		
+		// 🔒 已移除：以下敏感變量不應注入到前端
+		// ❌ 'import.meta.env.SUPABASE_SERVICE_ROLE_KEY' - 服務端密鑰
+		// ❌ 'import.meta.env.DATABASE_URL' - 數據庫連接字符串
+		// ❌ 'import.meta.env.TURSO_AUTH_TOKEN' - 數據庫認證 Token
+		// ❌ 'import.meta.env.TURSO_API_TOKEN' - API Token
+		// 這些變量僅應在後端使用（server/）
 	}
 });
