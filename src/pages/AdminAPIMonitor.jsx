@@ -32,6 +32,11 @@ const AdminAPIMonitor = () => {
     info: 0,
   });
   const [lastUpdate, setLastUpdate] = useState(null);
+  const [apiHealth, setApiHealth] = useState({
+    summary: { total: 0, healthy: 0, unhealthy: 0, avgResponseTime: 0 },
+    endpoints: [],
+  });
+  const [healthLoading, setHealthLoading] = useState(false);
 
   // 獲取日誌
   const fetchLogs = async (level = null) => {
@@ -84,16 +89,39 @@ const AdminAPIMonitor = () => {
     }
   };
 
+  // 獲取 API 健康狀態
+  const fetchApiHealth = async () => {
+    setHealthLoading(true);
+    try {
+      const res = await fetch('/api/admin/api-health', {
+        headers: {
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setApiHealth(data);
+      }
+    } catch (error) {
+      console.error('獲取 API 健康狀態失敗:', error);
+    } finally {
+      setHealthLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchLogs();
     fetchLogs('error');
     fetchStats();
+    fetchApiHealth();
     
     // 每 30 秒自動刷新
     const interval = setInterval(() => {
       fetchLogs();
       fetchLogs('error');
       fetchStats();
+      fetchApiHealth();
     }, 30000);
     
     return () => clearInterval(interval);
@@ -185,10 +213,11 @@ const AdminAPIMonitor = () => {
                 fetchLogs();
                 fetchLogs('error');
                 fetchStats();
+                fetchApiHealth();
               }}
-              disabled={loading}
+              disabled={loading || healthLoading}
             >
-              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-4 w-4 mr-2 ${(loading || healthLoading) ? 'animate-spin' : ''}`} />
               刷新
             </Button>
           </div>
@@ -247,8 +276,11 @@ const AdminAPIMonitor = () => {
       </div>
 
       {/* 日誌內容 */}
-      <Tabs defaultValue="all" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+      <Tabs defaultValue="api-health" className="w-full">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="api-health">
+            API 健康 ({apiHealth.summary.healthy}/{apiHealth.summary.total})
+          </TabsTrigger>
           <TabsTrigger value="all">
             所有日誌 ({logs.length})
           </TabsTrigger>
@@ -259,6 +291,115 @@ const AdminAPIMonitor = () => {
             系統信息
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="api-health" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="h-5 w-5 text-blue-600" />
+                API 端點健康檢查
+              </CardTitle>
+              <CardDescription>
+                監控所有關鍵 API 端點的健康狀態和響應時間
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {/* API 健康統計 */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div className="p-4 bg-blue-50 rounded-lg">
+                  <div className="text-sm text-gray-600 mb-1">總端點</div>
+                  <div className="text-2xl font-bold text-blue-600">{apiHealth.summary.total}</div>
+                </div>
+                <div className="p-4 bg-green-50 rounded-lg">
+                  <div className="text-sm text-gray-600 mb-1">健康</div>
+                  <div className="text-2xl font-bold text-green-600">{apiHealth.summary.healthy}</div>
+                </div>
+                <div className="p-4 bg-red-50 rounded-lg">
+                  <div className="text-sm text-gray-600 mb-1">異常</div>
+                  <div className="text-2xl font-bold text-red-600">{apiHealth.summary.unhealthy}</div>
+                </div>
+                <div className="p-4 bg-purple-50 rounded-lg">
+                  <div className="text-sm text-gray-600 mb-1">平均響應時間</div>
+                  <div className="text-2xl font-bold text-purple-600">{apiHealth.summary.avgResponseTime}ms</div>
+                </div>
+              </div>
+
+              {healthLoading ? (
+                <div className="text-center py-8">
+                  <RefreshCw className="h-8 w-8 animate-spin mx-auto text-gray-400" />
+                  <p className="mt-2 text-gray-500">檢查中...</p>
+                </div>
+              ) : apiHealth.endpoints.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <AlertCircle className="h-12 w-12 mx-auto mb-2" />
+                  <p>暫無 API 端點數據</p>
+                </div>
+              ) : (
+                <ScrollArea className="h-[500px]">
+                  <div className="space-y-2">
+                    {apiHealth.endpoints.map((endpoint, idx) => (
+                      <Card key={idx} className="hover:shadow-md transition-shadow">
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3 flex-1">
+                              <div className={`p-2 rounded-full ${
+                                endpoint.status === 'healthy' ? 'bg-green-50' : 
+                                endpoint.status === 'error' ? 'bg-red-50' : 'bg-gray-50'
+                              }`}>
+                                {endpoint.status === 'healthy' ? (
+                                  <CheckCircle className="h-5 w-5 text-green-500" />
+                                ) : endpoint.status === 'error' ? (
+                                  <XCircle className="h-5 w-5 text-red-500" />
+                                ) : (
+                                  <AlertCircle className="h-5 w-5 text-gray-500" />
+                                )}
+                              </div>
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="font-medium">{endpoint.name}</span>
+                                  <Badge variant="outline" className="text-xs">
+                                    {endpoint.method}
+                                  </Badge>
+                                  <Badge variant="secondary" className="text-xs">
+                                    {endpoint.category}
+                                  </Badge>
+                                  {endpoint.requireAuth && (
+                                    <Badge variant="outline" className="text-xs text-orange-600">
+                                      需認證
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="text-sm text-gray-500 font-mono">
+                                  {endpoint.path}
+                                </div>
+                                {endpoint.error && (
+                                  <div className="text-sm text-red-600 mt-1">
+                                    錯誤: {endpoint.error}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className={`text-lg font-bold ${
+                                endpoint.responseTime < 100 ? 'text-green-600' :
+                                endpoint.responseTime < 300 ? 'text-yellow-600' : 'text-red-600'
+                              }`}>
+                                {endpoint.responseTime}ms
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {endpoint.statusCode || '-'}
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="all" className="mt-4">
           <Card>
