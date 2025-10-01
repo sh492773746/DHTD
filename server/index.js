@@ -4795,8 +4795,19 @@ async function ensureSharedForumSchema() {
       "create index if not exists idx_shared_likes_post on shared_likes(post_id)"
     ];
     for (const s of statements) { try { await client.execute(s); } catch {} }
+    
+    // 确保 shared_posts 表有所有必需的字段（兼容旧表）
     try { await client.execute("alter table shared_posts add column is_ad integer default 0"); } catch {}
+    try { await client.execute("alter table shared_posts add column is_pinned integer default 0"); } catch {}
+    try { await client.execute("alter table shared_posts add column status text default 'approved'"); } catch {}
+    try { await client.execute("alter table shared_posts add column rejection_reason text"); } catch {}
+    try { await client.execute("alter table shared_posts add column updated_at text"); } catch {}
+    
+    // 更新现有记录的默认值
     try { await client.execute("update shared_posts set is_ad = 0 where is_ad is null"); } catch {}
+    try { await client.execute("update shared_posts set is_pinned = 0 where is_pinned is null"); } catch {}
+    try { await client.execute("update shared_posts set status = 'approved' where status is null"); } catch {}
+    
     __ensureCache.shared = true;
   } catch {}
 }

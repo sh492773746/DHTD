@@ -2230,6 +2230,13 @@ curl -H "Authorization: Bearer $TURSO_AUTH_TOKEN" $TURSO_DATABASE_URL
 
 ## 版本歷史
 
+### v1.0.2 (2025-10-01)
+- 🐛 **修復 shared_posts 表 Schema 問題**
+  - 添加缺失字段：`is_ad`, `is_pinned`, `status`, `rejection_reason`, `updated_at`
+  - 自動遷移現有表結構，確保向後兼容
+  - 修復共享帖子創建和查詢功能
+  - **效果**: 跨租戶共享帖子功能恢復正常
+
 ### v1.0.1 (2025-09-30)
 - 🐛 **修復積分同步問題** - 統一所有積分操作使用全局數據庫
   - 修復簽到積分（`/api/points/checkin`）
