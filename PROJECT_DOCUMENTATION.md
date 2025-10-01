@@ -2281,6 +2281,21 @@ curl -H "Authorization: Bearer $TURSO_AUTH_TOKEN" $TURSO_DATABASE_URL
 
 ## 版本歷史
 
+### v1.1.0 (2025-10-01) - 🔒 安全加固版本
+- 🔴 **修復嚴重安全漏洞**
+  - **JWT Token 驗證加固**: 移除生產環境的 decode fallback，防止 Token 偽造
+  - **環境變量洩漏修復**: 移除前端注入的敏感變量（SERVICE_ROLE_KEY, AUTH_TOKEN 等）
+  - **文件上傳安全**: 新增文件實際內容驗證，防止惡意文件偽裝
+  - **DoS 防護**: 新增請求體大小限制（15MB），防止大請求攻擊
+  - **代碼清理**: 刪除不安全的舊 AuthContext（localStorage 風險）
+
+- 📋 **新增安全分析報告** (`SECURITY_AND_OPTIMIZATION_REPORT.md`)
+  - 30 個安全和架構問題詳細分析
+  - 按嚴重程度分類（嚴重/中等/輕微）
+  - 詳細修復建議和代碼示例
+  - 改進路線圖和優先級清單
+  - 項目整體評分：63/100
+
 ### v1.0.3 (2025-10-01)
 - ✨ **新增 API 監控功能**（僅超級管理員）
   - 新增後台 API 監控頁面 (`/admin/api-monitor`)
