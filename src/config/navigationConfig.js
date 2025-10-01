@@ -12,6 +12,7 @@ import {
   Wand2,
   Database,
   Activity,
+  BookOpen,
 } from 'lucide-react';
 
 export const mainNavItems = [
@@ -52,6 +53,7 @@ export const adminNavItems = [
     title: '系统监控',
     items: [
       { to: '/admin/api-monitor', label: 'API 监控', icon: Activity },
+      { to: '/admin/api-docs', label: 'API 文档', icon: BookOpen },
     ],
   },
 ];

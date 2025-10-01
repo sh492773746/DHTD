@@ -41,6 +41,7 @@ import AdminShopManagement from '@/pages/AdminShopManagement';
 import AdminDatabases from '@/pages/AdminDatabases';
 import AdminSEO from '@/pages/AdminSEO';
 import AdminAPIMonitor from '@/pages/AdminAPIMonitor';
+import AdminAPIDocs from '@/pages/AdminAPIDocs';
 
 // Tenant Admin Pages
 import TenantDashboard from '@/pages/TenantDashboard';
@@ -143,6 +144,7 @@ const routerConfig = [
             { path: 'shop', element: <AdminShopManagement /> },
             { path: 'seo', element: <AdminSEO /> },
             { path: 'api-monitor', element: <AdminAPIMonitor /> },
+            { path: 'api-docs', element: <AdminAPIDocs /> },
         ]
       },
       {
