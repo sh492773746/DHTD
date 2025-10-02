@@ -22,7 +22,30 @@ import dns from 'node:dns/promises';
 import net from 'node:net';
 import sharp from 'sharp';
 
+// 🔒 新增：安全和工具模塊
+import { isRateLimited, getRateLimitInfo, resetRateLimit } from './utils/redis.js';
+import { auditLog, getClientInfo, AuditActions, ResourceTypes } from './utils/auditLog.js';
+import { 
+  APIError, 
+  UnauthorizedError, 
+  ForbiddenError, 
+  NotFoundError, 
+  ValidationError,
+  RateLimitError,
+  ConflictError,
+  successResponse, 
+  errorResponse,
+  setupErrorHandler,
+  asyncHandler,
+  validate,
+  requireAuth,
+  requireAdmin,
+} from './utils/errors.js';
+
 const app = new Hono();
+
+// 🔒 設置全局錯誤處理
+setupErrorHandler(app);
 
 // Secure headers
 app.use('*', secureHeaders());
@@ -4610,6 +4633,47 @@ app.get('/api/admin/logs/stats', async (c) => {
   }
 });
 
+// 获取审计日志（仅超管）
+app.get('/api/admin/audit-logs', asyncHandler(async (c) => {
+  const userId = c.get('userId');
+  requireAuth(userId);
+  
+  const isAdmin = await isSuperAdminUser(userId);
+  requireAdmin(isAdmin);
+  
+  const page = Number(c.req.query('page') || 1);
+  const limit = Math.min(Number(c.req.query('limit') || 50), 100);
+  const action = c.req.query('action');
+  const targetUserId = c.req.query('userId');
+  
+  const client = getGlobalClient();
+  
+  let query = `SELECT * FROM audit_logs WHERE 1=1`;
+  const params = [];
+  
+  if (action) {
+    query += ` AND action = ?`;
+    params.push(action);
+  }
+  
+  if (targetUserId) {
+    query += ` AND user_id = ?`;
+    params.push(targetUserId);
+  }
+  
+  query += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+  params.push(limit, (page - 1) * limit);
+  
+  const result = await client.execute(query, params);
+  
+  return c.json(successResponse({
+    logs: result.rows,
+    page,
+    limit,
+    total: result.rows.length,
+  }));
+}));
+
 // 检查 API 端点健康状态（仅超管）
 app.get('/api/admin/api-health', async (c) => {
   try {
@@ -4768,6 +4832,15 @@ function logToCache(level, message, labels = []) {
     __logCache.info.unshift(log);
     if (__logCache.info.length > 100) __logCache.info.pop();
   }
+}
+
+// 🔒 初始化審計日誌系統
+try {
+  const { setGlobalClient } = await import('./utils/auditLog.js');
+  setGlobalClient(getGlobalClient());
+  console.log('✅ 審計日誌系統已初始化');
+} catch (e) {
+  console.error('❌ 審計日誌初始化失敗:', e.message);
 }
 
 const port = process.env.PORT ? Number(process.env.PORT) : 8787;

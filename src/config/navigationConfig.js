@@ -54,6 +54,7 @@ export const adminNavItems = [
     items: [
       { to: '/admin/api-monitor', label: 'API 监控', icon: Activity },
       { to: '/admin/api-docs', label: 'API 文档', icon: BookOpen },
+      { to: '/admin/audit-logs', label: '审计日志', icon: FileText },
     ],
   },
 ];

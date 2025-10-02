@@ -42,6 +42,7 @@ import AdminDatabases from '@/pages/AdminDatabases';
 import AdminSEO from '@/pages/AdminSEO';
 import AdminAPIMonitor from '@/pages/AdminAPIMonitor';
 import AdminAPIDocs from '@/pages/AdminAPIDocs';
+import AdminAuditLogs from '@/pages/AdminAuditLogs';
 
 // Tenant Admin Pages
 import TenantDashboard from '@/pages/TenantDashboard';
@@ -145,6 +146,7 @@ const routerConfig = [
             { path: 'seo', element: <AdminSEO /> },
             { path: 'api-monitor', element: <AdminAPIMonitor /> },
             { path: 'api-docs', element: <AdminAPIDocs /> },
+            { path: 'audit-logs', element: <AdminAuditLogs /> },
         ]
       },
       {
