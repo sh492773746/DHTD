@@ -42,6 +42,18 @@ import {
   requireAdmin,
 } from './utils/errors.js';
 
+// ⚡ 新增：性能優化模塊
+import cache, { CacheKeys, CacheInvalidation } from './utils/cache.js';
+import { 
+  batchGetProfiles, 
+  batchGetPostStats, 
+  batchCheckUserLikes,
+  enrichPostsOptimized,
+  getCachedSettings,
+  getCachedPageContent,
+  getCachedTenantResolve,
+} from './utils/queryOptimizer.js';
+
 const app = new Hono();
 
 // 🔒 設置全局錯誤處理
