@@ -2481,11 +2481,8 @@ app.delete('/api/admin/branch-map/:tenantId', async (c) => {
     return c.json({ error: 'failed' }, 500);
   }
 });
-function requireAdmin(c) {
-  const userId = c.get('userId');
-  if (!userId) return { ok: false, reason: 'unauthorized' };
-  return { ok: true, userId };
-}
+// requireAdmin 函數已移至 utils/errors.js
+
 async function isSuperAdminUser(userId) {
   if (!userId) return false;
   try {
