@@ -2281,6 +2281,40 @@ curl -H "Authorization: Bearer $TURSO_AUTH_TOKEN" $TURSO_DATABASE_URL
 
 ## 版本歷史
 
+### v1.2.0 (2025-10-01) - ⚡ 系統升級版本
+- 🚀 **Rate Limiting 升級** - 使用 Upstash Redis（免費方案）
+  - 支持 Upstash Redis（10,000 命令/天免費額度）
+  - 自動降級到內存存儲（未配置 Redis 時）
+  - 支持多實例部署
+  - 持久化限流數據（防止重啟繞過）
+  - 提供 Redis 工具模塊（`server/utils/redis.js`）
+
+- 📝 **審計日誌系統**
+  - 新增審計日誌模塊（`server/utils/auditLog.js`）
+  - 自動創建 `audit_logs` 表（含索引）
+  - 記錄關鍵操作：用戶/帖子/權限/積分/商城/租戶
+  - 記錄 IP 地址、User Agent、操作詳情
+  - 支持成功/失敗狀態記錄
+  - 新增管理頁面：`/admin/audit-logs`
+  - 新增查詢 API：`GET /api/admin/audit-logs`
+  - 搜索、過濾、統計功能
+
+- 🎯 **統一錯誤處理**
+  - 新增錯誤處理模塊（`server/utils/errors.js`）
+  - 標準化 API 響應格式（`{ success, data/error }`）
+  - 自定義錯誤類（6 種常見錯誤）
+  - 全局錯誤處理中間件
+  - 輔助驗證函數（validate、requireAuth、requireAdmin）
+  - 異步錯誤包裝器（asyncHandler）
+  - 生產環境自動隱藏敏感信息
+
+- 📚 **完整集成指南** (`RATE_LIMITING_AUDIT_ERROR_UPGRADE_GUIDE.md`)
+  - Upstash Redis 免費方案設置步驟
+  - Rate Limiting 使用示例
+  - 審計日誌集成示例
+  - 統一錯誤處理示例
+  - 分批集成建議（4 週計劃）
+
 ### v1.1.0 (2025-10-01) - 🔒 安全加固版本
 - 🔴 **修復嚴重安全漏洞**
   - **JWT Token 驗證加固**: 移除生產環境的 decode fallback，防止 Token 偽造
