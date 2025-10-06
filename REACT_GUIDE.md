@@ -1151,6 +1151,545 @@ export default InfinitePredictions;
 
 祝开发顺利！🚀
 
-# API 安全配置
-API_KEY=jnd28_api_key_5a738f303ae60b7183fa56773e8a3506
-API_KEY_ENABLED=true
+# API 分页和筛选功能使用指南
+
+## 📋 概述
+
+所有预测API端点现在都支持分页、自定义返回数量和算法筛选功能！
+
+### 支持分页的端点
+
+- ✅ `/api/predictions` - 加拿大28预测记录
+- ✅ `/api/ff28/predictions` - 分分28预测记录  
+- ✅ `/api/bit28/predictions` - 比特28预测记录
+
+---
+
+## 🎯 URL 参数说明
+
+### 1. `limit` - 返回数量
+
+控制每次请求返回的记录数量。
+
+- **默认值**: 20
+- **最大值**: 200
+- **最小值**: 1
+- **类型**: 整数
+
+**示例：**
+```
+/api/predictions?limit=50        # 返回50条记录
+/api/ff28/predictions?limit=100  # 返回100条记录
+/api/bit28/predictions?limit=200 # 返回200条记录（最大值）
+```
+
+### 2. `offset` - 偏移量
+
+指定从哪一条记录开始返回（从0开始计数）。
+
+- **默认值**: 0
+- **类型**: 整数
+- **用途**: 配合limit实现分页
+
+**示例：**
+```
+/api/predictions?limit=20&offset=0   # 第1-20条
+/api/predictions?limit=20&offset=20  # 第21-40条
+/api/predictions?limit=20&offset=40  # 第41-60条
+```
+
+### 3. `page` - 页码
+
+更直观的分页方式（从1开始）。
+
+- **类型**: 整数
+- **说明**: 会自动计算offset，与offset参数二选一
+- **计算公式**: `offset = (page - 1) * limit`
+
+**示例：**
+```
+/api/predictions?limit=20&page=1  # 第1页（第1-20条）
+/api/predictions?limit=20&page=2  # 第2页（第21-40条）
+/api/predictions?limit=20&page=3  # 第3页（第41-60条）
+```
+
+### 4. `algorithm_id` - 算法筛选
+
+按特定算法筛选预测记录。
+
+- **可选值**: 1, 2, 3, 4
+  - 1 = 算法1 - 趋势反转
+  - 2 = 算法2 - 概率统计
+  - 3 = 算法3 - 随机对照
+  - 4 = 算法4 - 加权历史
+- **类型**: 整数
+- **说明**: 可选参数，不传则返回所有算法
+
+**示例：**
+```
+/api/predictions?algorithm_id=1           # 只返回算法1的预测
+/api/predictions?algorithm_id=2&limit=50  # 返回算法2的50条预测
+```
+
+---
+
+## 📊 响应格式
+
+### 新增的分页信息字段
+
+```json
+{
+  "status": "success",
+  "count": 20,           // 本次返回的记录数
+  "total": 863,          // 总记录数
+  "page": 1,             // 当前页码
+  "total_pages": 44,     // 总页数
+  "limit": 20,           // 每页记录数
+  "offset": 0,           // 偏移量
+  "data": [...]          // 预测数据数组
+}
+```
+
+### 字段说明
+
+| 字段 | 说明 | 示例 |
+|------|------|------|
+| `count` | 本次返回的实际记录数 | 20 |
+| `total` | 满足条件的总记录数 | 863 |
+| `page` | 当前页码 | 1 |
+| `total_pages` | 总页数 | 44 |
+| `limit` | 每页记录数 | 20 |
+| `offset` | 当前偏移量 | 0 |
+| `data` | 预测数据数组 | [...] |
+
+---
+
+## 💡 使用示例
+
+### 示例 1: 获取每个算法的20条数据
+
+如果您需要每个算法都有20条数据（总共80条），可以这样做：
+
+**方法1: 分4次请求（推荐）**
+
+```javascript
+// 使用 JavaScript/React
+async function fetchAllAlgorithms() {
+  const algorithms = [1, 2, 3, 4];
+  const allData = [];
+  
+  for (const algoId of algorithms) {
+    const response = await fetch(
+      `http://156.67.218.225:5000/api/predictions?algorithm_id=${algoId}&limit=20`,
+      {
+        headers: {
+          'X-API-Key': 'jnd28_api_key_5a738f303ae60b7183fa56773e8a3506'
+        }
+      }
+    );
+    
+    const result = await response.json();
+    allData.push({
+      algorithm: algoId,
+      data: result.data
+    });
+  }
+  
+  return allData;
+}
+
+// 使用
+fetchAllAlgorithms().then(data => {
+  console.log('算法1数据:', data[0].data);  // 20条
+  console.log('算法2数据:', data[1].data);  // 20条
+  console.log('算法3数据:', data[2].data);  // 20条
+  console.log('算法4数据:', data[3].data);  // 20条
+});
+```
+
+**方法2: 一次获取80条（所有算法混合）**
+
+```javascript
+async function fetchMixedData() {
+  const response = await fetch(
+    'http://156.67.218.225:5000/api/predictions?limit=80',
+    {
+      headers: {
+        'X-API-Key': 'jnd28_api_key_5a738f303ae60b7183fa56773e8a3506'
+      }
+    }
+  );
+  
+  const result = await response.json();
+  
+  // 按算法分组
+  const grouped = result.data.reduce((acc, item) => {
+    const algoId = item.algorithm_id;
+    if (!acc[algoId]) acc[algoId] = [];
+    acc[algoId].push(item);
+    return acc;
+  }, {});
+  
+  return grouped;
+}
+```
+
+### 示例 2: 实现分页列表
+
+```javascript
+function PaginatedPredictions() {
+  const [data, setData] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const limit = 20;
+  
+  const fetchPage = async (page) => {
+    const response = await fetch(
+      `http://156.67.218.225:5000/api/predictions?limit=${limit}&page=${page}`,
+      {
+        headers: {
+          'X-API-Key': 'jnd28_api_key_5a738f303ae60b7183fa56773e8a3506'
+        }
+      }
+    );
+    
+    const result = await response.json();
+    setData(result.data);
+    setTotalPages(result.total_pages);
+    setCurrentPage(result.page);
+  };
+  
+  return (
+    <div>
+      {/* 显示数据 */}
+      {data.map(item => <div key={item.id}>{item.issue}</div>)}
+      
+      {/* 分页按钮 */}
+      <button 
+        onClick={() => fetchPage(currentPage - 1)}
+        disabled={currentPage === 1}
+      >
+        上一页
+      </button>
+      
+      <span>{currentPage} / {totalPages}</span>
+      
+      <button 
+        onClick={() => fetchPage(currentPage + 1)}
+        disabled={currentPage === totalPages}
+      >
+        下一页
+      </button>
+    </div>
+  );
+}
+```
+
+### 示例 3: 无限滚动
+
+```javascript
+function InfiniteScroll() {
+  const [predictions, setPredictions] = useState([]);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const limit = 20;
+  
+  const loadMore = async () => {
+    const response = await fetch(
+      `http://156.67.218.225:5000/api/predictions?limit=${limit}&offset=${offset}`,
+      {
+        headers: {
+          'X-API-Key': 'jnd28_api_key_5a738f303ae60b7183fa56773e8a3506'
+        }
+      }
+    );
+    
+    const result = await response.json();
+    
+    if (result.data.length > 0) {
+      setPredictions(prev => [...prev, ...result.data]);
+      setOffset(prev => prev + limit);
+    } else {
+      setHasMore(false);
+    }
+  };
+  
+  return (
+    <div>
+      {predictions.map(item => <div key={item.id}>{item.issue}</div>)}
+      
+      {hasMore && (
+        <button onClick={loadMore}>加载更多</button>
+      )}
+    </div>
+  );
+}
+```
+
+### 示例 4: 获取特定算法的大量数据
+
+```javascript
+// 获取算法1的100条预测
+async function getAlgorithm1Data() {
+  const response = await fetch(
+    'http://156.67.218.225:5000/api/predictions?algorithm_id=1&limit=100',
+    {
+      headers: {
+        'X-API-Key': 'jnd28_api_key_5a738f303ae60b7183fa56773e8a3506'
+      }
+    }
+  );
+  
+  const result = await response.json();
+  console.log(`返回了 ${result.count} 条算法1的数据`);
+  console.log(`总共有 ${result.total} 条算法1的数据`);
+  
+  return result.data;
+}
+```
+
+---
+
+## 🔧 实用技巧
+
+### 1. 如何获取所有数据？
+
+如果您需要获取所有数据（不推荐，数据量大时会很慢）：
+
+```javascript
+async function getAllData() {
+  const response = await fetch(
+    'http://156.67.218.225:5000/api/predictions?limit=200',
+    {
+      headers: {
+        'X-API-Key': 'jnd28_api_key_5a738f303ae60b7183fa56773e8a3506'
+      }
+    }
+  );
+  
+  const result = await response.json();
+  const total = result.total;
+  const allData = [...result.data];
+  
+  // 计算还需要几次请求
+  const remainingPages = Math.ceil((total - 200) / 200);
+  
+  for (let i = 1; i <= remainingPages; i++) {
+    const res = await fetch(
+      `http://156.67.218.225:5000/api/predictions?limit=200&offset=${i * 200}`,
+      {
+        headers: {
+          'X-API-Key': 'jnd28_api_key_5a738f303ae60b7183fa56773e8a3506'
+        }
+      }
+    );
+    
+    const data = await res.json();
+    allData.push(...data.data);
+  }
+  
+  return allData;
+}
+```
+
+### 2. 参数组合优先级
+
+- 如果同时提供 `page` 和 `offset`，`page` 优先
+- `algorithm_id` 可以与任何分页参数组合使用
+
+### 3. 性能优化建议
+
+- ✅ 使用分页，避免一次请求大量数据
+- ✅ 使用 `algorithm_id` 筛选，减少不需要的数据传输
+- ✅ 合理设置 `limit`，建议 20-50 条
+- ❌ 避免频繁请求全量数据
+
+---
+
+## 📋 完整API示例
+
+### cURL 示例
+
+```bash
+# 基础请求（默认20条）
+curl -H "X-API-Key: jnd28_api_key_5a738f303ae60b7183fa56773e8a3506" \
+  http://156.67.218.225:5000/api/predictions
+
+# 获取50条数据
+curl -H "X-API-Key: jnd28_api_key_5a738f303ae60b7183fa56773e8a3506" \
+  "http://156.67.218.225:5000/api/predictions?limit=50"
+
+# 获取第2页（每页20条）
+curl -H "X-API-Key: jnd28_api_key_5a738f303ae60b7183fa56773e8a3506" \
+  "http://156.67.218.225:5000/api/predictions?limit=20&page=2"
+
+# 只获取算法1的数据
+curl -H "X-API-Key: jnd28_api_key_5a738f303ae60b7183fa56773e8a3506" \
+  "http://156.67.218.225:5000/api/predictions?algorithm_id=1"
+
+# 获取算法2的100条数据
+curl -H "X-API-Key: jnd28_api_key_5a738f303ae60b7183fa56773e8a3506" \
+  "http://156.67.218.225:5000/api/predictions?algorithm_id=2&limit=100"
+
+# 使用offset分页
+curl -H "X-API-Key: jnd28_api_key_5a738f303ae60b7183fa56773e8a3506" \
+  "http://156.67.218.225:5000/api/predictions?limit=20&offset=40"
+```
+
+### Python 示例
+
+```python
+import requests
+
+API_KEY = "jnd28_api_key_5a738f303ae60b7183fa56773e8a3506"
+BASE_URL = "http://156.67.218.225:5000"
+
+headers = {
+    "X-API-Key": API_KEY
+}
+
+# 获取每个算法的20条数据
+def get_all_algorithms_data():
+    all_data = {}
+    
+    for algo_id in [1, 2, 3, 4]:
+        response = requests.get(
+            f"{BASE_URL}/api/predictions",
+            headers=headers,
+            params={
+                "algorithm_id": algo_id,
+                "limit": 20
+            }
+        )
+        
+        result = response.json()
+        all_data[f"算法{algo_id}"] = result['data']
+    
+    return all_data
+
+# 分页获取数据
+def get_paginated_data(page=1, limit=20):
+    response = requests.get(
+        f"{BASE_URL}/api/predictions",
+        headers=headers,
+        params={
+            "page": page,
+            "limit": limit
+        }
+    )
+    
+    return response.json()
+
+# 使用示例
+data = get_all_algorithms_data()
+print(f"算法1数据: {len(data['算法1'])} 条")
+print(f"算法2数据: {len(data['算法2'])} 条")
+
+paginated = get_paginated_data(page=1, limit=50)
+print(f"第1页共 {paginated['count']} 条数据")
+print(f"总共 {paginated['total']} 条数据")
+print(f"共 {paginated['total_pages']} 页")
+```
+
+### Node.js/axios 示例
+
+```javascript
+const axios = require('axios');
+
+const API_KEY = 'jnd28_api_key_5a738f303ae60b7183fa56773e8a3506';
+const BASE_URL = 'http://156.67.218.225:5000';
+
+const api = axios.create({
+  baseURL: BASE_URL,
+  headers: {
+    'X-API-Key': API_KEY
+  }
+});
+
+// 获取每个算法的20条数据
+async function getAllAlgorithmsData() {
+  const algorithms = [1, 2, 3, 4];
+  const promises = algorithms.map(id => 
+    api.get('/api/predictions', {
+      params: { algorithm_id: id, limit: 20 }
+    })
+  );
+  
+  const results = await Promise.all(promises);
+  
+  return results.map((res, idx) => ({
+    algorithm: algorithms[idx],
+    count: res.data.count,
+    data: res.data.data
+  }));
+}
+
+// 使用
+getAllAlgorithmsData().then(data => {
+  data.forEach(item => {
+    console.log(`算法${item.algorithm}: ${item.count}条数据`);
+  });
+});
+```
+
+---
+
+## ❓ 常见问题
+
+### Q1: 为什么我只能获取20条数据？
+
+**A**: 默认 `limit=20`，请添加 `limit` 参数增加返回数量，最大200。
+
+```
+http://156.67.218.225:5000/api/predictions?limit=100
+```
+
+### Q2: 如何获取每个算法的20条数据？
+
+**A**: 分别请求每个算法ID：
+
+```javascript
+for (let algoId = 1; algoId <= 4; algoId++) {
+  fetch(`/api/predictions?algorithm_id=${algoId}&limit=20`)
+}
+```
+
+### Q3: 分页时，page 和 offset 有什么区别？
+
+**A**: 
+- `page`: 更直观，从1开始计数（第1页、第2页...）
+- `offset`: 更底层，表示跳过多少条记录（0, 20, 40...）
+
+推荐使用 `page` 参数，更易理解。
+
+### Q4: 能否一次获取所有数据？
+
+**A**: 技术上可以，但不推荐。建议：
+- 使用分页，每次获取适量数据
+- 最大单次请求限制为200条
+- 如需更多，请分多次请求
+
+### Q5: 响应中的 total 和 count 有什么区别？
+
+**A**:
+- `total`: 数据库中符合条件的总记录数
+- `count`: 本次请求实际返回的记录数
+
+---
+
+## 🎯 总结
+
+现在您可以：
+
+✅ 自定义返回数量（1-200条）  
+✅ 使用分页获取大量数据  
+✅ 按算法ID筛选数据  
+✅ 获取完整的分页信息  
+
+**最佳实践：**
+- 需要每个算法20条 → 分4次请求，每次 `algorithm_id` 不同
+- 需要大量数据 → 使用分页，避免一次获取所有
+- 需要性能优化 → 合理设置 `limit`，使用 `algorithm_id` 筛选
+
+祝使用愉快！🚀
+

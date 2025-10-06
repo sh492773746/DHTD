@@ -6,26 +6,25 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
-import { usePredictions, useAlgorithmCompare } from '@/hooks/usePredictionAPI';
+import { useAllAlgorithmPredictions, useAlgorithmCompare } from '@/hooks/usePredictionAPI';
 
 function PredictionFf28() {
   const { siteSettings } = useAuth();
   const navigate = useNavigate();
   const [selectedAlgorithm, setSelectedAlgorithm] = useState(null);
   
-  const { data: predictions, loading: predictionsLoading, refetch: refetchPredictions } = usePredictions('ff28');
+  // 使用新的hook，每个算法获取20条数据
+  const { data: algorithmPredictions, loading: predictionsLoading, refetch: refetchPredictions } = useAllAlgorithmPredictions('ff28', 20);
   const { data: algorithms, loading: algorithmsLoading, refetch: refetchAlgorithms } = useAlgorithmCompare('ff28');
 
-  // 计算每个算法最新100条的准确率
-  const getAlgorithmStats = (algorithmName) => {
-    if (!predictions || predictions.length === 0) return { total: 0, correct: 0, accuracy: 0 };
+  // 计算每个算法的准确率（基于已验证的数据）
+  const getAlgorithmStats = (algorithmName, algorithmId) => {
+    const predictions = algorithmPredictions[algorithmId] || [];
+    if (predictions.length === 0) return { total: 0, correct: 0, accuracy: 0 };
     
-    const algorithmPredictions = predictions
-      .filter(p => p.algorithm === algorithmName && p.status === 'verified')
-      .slice(0, 100);
-    
-    const total = algorithmPredictions.length;
-    const correct = algorithmPredictions.filter(p => p.result === '对').length;
+    const verified = predictions.filter(p => p.status === 'verified');
+    const total = verified.length;
+    const correct = verified.filter(p => p.result === '对').length;
     const accuracy = total > 0 ? (correct / total * 100).toFixed(2) : 0;
     
     return { total, correct, accuracy };
@@ -36,9 +35,12 @@ function PredictionFf28() {
     refetchAlgorithms();
   };
 
-  // 获取选中算法的预测记录（API限制每个算法约5-10条）
-  const filteredPredictions = selectedAlgorithm 
-    ? predictions.filter(p => p.algorithm === selectedAlgorithm)
+  // 获取选中算法的预测记录（每个算法20条）
+  const filteredPredictions = selectedAlgorithm && algorithms
+    ? (() => {
+        const algo = algorithms.find(a => a.algorithm === selectedAlgorithm);
+        return algo ? algorithmPredictions[algo.algorithm_id] || [] : [];
+      })()
     : [];
 
   return (
@@ -76,7 +78,7 @@ function PredictionFf28() {
                     <p className="text-gray-500 text-sm mt-1">Fenfen 28 Prediction</p>
                   </div>
                 </div>
-                <p className="text-gray-600 text-sm">基于最新100条已验证数据的智能算法分析与准确率统计</p>
+                <p className="text-gray-600 text-sm">基于最新20条数据的智能算法分析与准确率统计</p>
               </div>
               <Button 
                 onClick={handleRefresh} 
@@ -114,7 +116,7 @@ function PredictionFf28() {
               ))
             ) : algorithms && algorithms.length > 0 ? (
               algorithms.slice(0, 4).map((algo, index) => {
-                const stats = getAlgorithmStats(algo.algorithm);
+                const stats = getAlgorithmStats(algo.algorithm, algo.algorithm_id);
                 const isSelected = selectedAlgorithm === algo.algorithm;
                 
                 const medalIcons = ['🥇', '🥈', '🥉', '🎖️'];
@@ -148,8 +150,8 @@ function PredictionFf28() {
                       
                       <div className="space-y-1 text-xs sm:text-sm text-gray-600">
                         <div className="flex justify-between">
-                          <span>最新100条</span>
-                          <span className="font-semibold">{stats.total}</span>
+                          <span>最新20条</span>
+                          <span className="font-semibold">{(algorithmPredictions[algo.algorithm_id] || []).length}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>正确</span>
@@ -182,7 +184,7 @@ function PredictionFf28() {
                 <CardTitle className="flex items-center justify-between text-base sm:text-lg">
                   <div className="flex items-center gap-2">
                     <div className="w-1 h-6 bg-black rounded-full"></div>
-                    <span className="font-bold text-gray-900">{selectedAlgorithm} - 预测记录 ({filteredPredictions.length}条)</span>
+                    <span className="font-bold text-gray-900">{selectedAlgorithm} - 最近20条预测记录</span>
                   </div>
                   <Button 
                     variant="ghost" 

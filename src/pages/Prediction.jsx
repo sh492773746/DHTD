@@ -69,7 +69,7 @@ function Prediction() {
       description: '区块链驱动的比特28预测引擎',
     },
   ];
-
+  
   return (
     <>
       <Helmet>
@@ -90,7 +90,7 @@ function Prediction() {
                   基于先进算法的多系统预测平台，实时分析海量数据，精准预测开奖结果
                 </p>
               </div>
-              <Button 
+                  <Button
                 onClick={handleRefreshAll} 
                 variant="outline" 
                 size="sm"
@@ -98,7 +98,7 @@ function Prediction() {
               >
                 <RefreshCw className="w-4 h-4 mr-2" />
                 刷新全部
-              </Button>
+                  </Button>
             </div>
 
             {/* 统计数据 */}
@@ -110,7 +110,7 @@ function Prediction() {
               <div className="text-center p-4 rounded-lg border border-gray-200 bg-gray-50">
                 <div className="text-2xl font-bold text-gray-900">12</div>
                 <div className="text-gray-600 text-sm mt-1">智能算法</div>
-              </div>
+                </div>
               <div className="text-center p-4 rounded-lg border border-gray-200 bg-gray-50">
                 <div className="text-2xl font-bold text-gray-900">24/7</div>
                 <div className="text-gray-600 text-sm mt-1">实时更新</div>

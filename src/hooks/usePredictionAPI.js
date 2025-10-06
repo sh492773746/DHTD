@@ -65,9 +65,56 @@ async function callPredictionAPI(endpoint, params = {}) {
 }
 
 // Hook: 獲取預測記錄
-// 注意：外部API限制只返回20条数据（每个算法约5条），不支持limit参数
-export function usePredictions(system = 'jnd28') {
+// 支持分页和算法筛选（API已更新支持limit、offset、page、algorithm_id参数）
+export function usePredictions(system = 'jnd28', options = {}) {
   const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [pagination, setPagination] = useState(null);
+
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const endpoint = system === 'jnd28' 
+        ? '/api/predictions' 
+        : `/api/${system}/predictions`;
+
+      // 支持 limit, offset, page, algorithm_id 参数
+      const result = await callPredictionAPI(endpoint, options);
+      
+      setData(result || []);
+      
+      // 如果API返回了分页信息，保存它
+      if (result && typeof result === 'object' && !Array.isArray(result)) {
+        setPagination({
+          total: result.total,
+          count: result.count,
+          page: result.page,
+          totalPages: result.total_pages,
+          limit: result.limit,
+          offset: result.offset,
+        });
+      }
+    } catch (err) {
+      setError(err.message);
+      console.error('獲取預測數據失敗:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [system, JSON.stringify(options)]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  return { data, loading, error, pagination, refetch: fetchData };
+}
+
+// Hook: 獲取所有算法的預測記錄（每個算法獲取指定數量）
+export function useAllAlgorithmPredictions(system = 'jnd28', limitPerAlgorithm = 20) {
+  const [data, setData] = useState({ 1: [], 2: [], 3: [], 4: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -80,16 +127,31 @@ export function usePredictions(system = 'jnd28') {
         ? '/api/predictions' 
         : `/api/${system}/predictions`;
 
-      // 外部API固定返回20条最新数据，不支持分页或limit参数
-      const result = await callPredictionAPI(endpoint);
-      setData(result || []);
+      // 並行請求4個算法的數據
+      const algorithms = [1, 2, 3, 4];
+      const promises = algorithms.map(algoId => 
+        callPredictionAPI(endpoint, { 
+          algorithm_id: algoId, 
+          limit: limitPerAlgorithm 
+        })
+      );
+
+      const results = await Promise.all(promises);
+      
+      // 組織數據：{ 1: [...], 2: [...], 3: [...], 4: [...] }
+      const organizedData = {};
+      algorithms.forEach((algoId, index) => {
+        organizedData[algoId] = results[index] || [];
+      });
+
+      setData(organizedData);
     } catch (err) {
       setError(err.message);
-      console.error('獲取預測數據失敗:', err);
+      console.error('獲取所有算法數據失敗:', err);
     } finally {
       setLoading(false);
     }
-  }, [system]);
+  }, [system, limitPerAlgorithm]);
 
   useEffect(() => {
     fetchData();
