@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
-import { TrendingUp, Activity, Zap, ChevronRight, RefreshCw, Award } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { TrendingUp, Activity, Award, ChevronRight, RefreshCw } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
@@ -38,12 +38,10 @@ function Prediction() {
     {
       id: 'jnd28',
       name: '加拿大28',
+      nameEn: 'Canada 28',
       icon: '🍁',
       path: '/prediction/jnd28',
-      gradient: 'from-purple-500 via-pink-500 to-indigo-500',
-      bgGradient: 'from-purple-50 via-pink-50 to-indigo-50',
-      borderColor: 'border-purple-200',
-      textColor: 'text-purple-700',
+      iconGradient: 'from-purple-500 to-pink-600',
       algorithms: jnd28Algos,
       loading: jnd28Loading,
       description: '基于加拿大28开奖数据的智能预测系统',
@@ -51,12 +49,10 @@ function Prediction() {
     {
       id: 'ff28',
       name: '分分28',
+      nameEn: 'Fenfen 28',
       icon: '⚡',
       path: '/prediction/ff28',
-      gradient: 'from-blue-500 via-cyan-500 to-teal-500',
-      bgGradient: 'from-blue-50 via-cyan-50 to-teal-50',
-      borderColor: 'border-blue-200',
-      textColor: 'text-blue-700',
+      iconGradient: 'from-blue-500 to-cyan-600',
       algorithms: ff28Algos,
       loading: ff28Loading,
       description: '高频分分28彩种的实时预测分析',
@@ -64,12 +60,10 @@ function Prediction() {
     {
       id: 'bit28',
       name: '比特28',
+      nameEn: 'Bitcoin 28',
       icon: '₿',
       path: '/prediction/bit28',
-      gradient: 'from-orange-500 via-amber-500 to-yellow-500',
-      bgGradient: 'from-orange-50 via-amber-50 to-yellow-50',
-      borderColor: 'border-orange-200',
-      textColor: 'text-orange-700',
+      iconGradient: 'from-orange-500 to-amber-600',
       algorithms: bit28Algos,
       loading: bit28Loading,
       description: '区块链驱动的比特28预测引擎',
@@ -83,48 +77,43 @@ function Prediction() {
         <meta name="description" content="智能预测系统 - 加拿大28、分分28、比特28算法预测" />
       </Helmet>
       
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-zinc-50 p-4 pb-20">
-        <div className="max-w-7xl mx-auto space-y-6">
-          {/* 顶部横幅 */}
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 p-8 text-white shadow-2xl">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-10 rounded-full -mr-32 -mt-32"></div>
-            <div className="absolute bottom-0 left-0 w-96 h-96 bg-white opacity-5 rounded-full -ml-48 -mb-48"></div>
-            
-            <div className="relative z-10">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h1 className="text-3xl sm:text-4xl font-bold mb-2 flex items-center gap-3">
-                    🎯 智能预测系统
-                  </h1>
-                  <p className="text-purple-100 text-sm sm:text-base">
-                    基于先进算法的多系统预测平台，实时分析海量数据，精准预测开奖结果
-                  </p>
-                </div>
-                <Button 
-                  onClick={handleRefreshAll} 
-                  variant="secondary" 
-                  size="sm"
-                  className="hidden sm:flex"
-                >
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  刷新全部
-                </Button>
+      <div className="min-h-screen bg-white p-4 pb-24">
+        <div className="max-w-7xl mx-auto space-y-8">
+          {/* 顶部标题 */}
+          <div className="border-b border-gray-200 pb-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">
+                  🎯 智能预测系统
+                </h1>
+                <p className="text-gray-600 text-sm sm:text-base">
+                  基于先进算法的多系统预测平台，实时分析海量数据，精准预测开奖结果
+                </p>
               </div>
+              <Button 
+                onClick={handleRefreshAll} 
+                variant="outline" 
+                size="sm"
+                className="hidden sm:flex border-gray-300 hover:border-gray-400"
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                刷新全部
+              </Button>
+            </div>
 
-              {/* 统计数据 */}
-              <div className="grid grid-cols-3 gap-4 mt-6">
-                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
-                  <div className="text-2xl font-bold">3</div>
-                  <div className="text-purple-100 text-sm">预测系统</div>
-                </div>
-                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
-                  <div className="text-2xl font-bold">12</div>
-                  <div className="text-purple-100 text-sm">智能算法</div>
-                </div>
-                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
-                  <div className="text-2xl font-bold">24/7</div>
-                  <div className="text-purple-100 text-sm">实时更新</div>
-                </div>
+            {/* 统计数据 */}
+            <div className="grid grid-cols-3 gap-4 mt-6">
+              <div className="text-center p-4 rounded-lg border border-gray-200 bg-gray-50">
+                <div className="text-2xl font-bold text-gray-900">3</div>
+                <div className="text-gray-600 text-sm mt-1">预测系统</div>
+              </div>
+              <div className="text-center p-4 rounded-lg border border-gray-200 bg-gray-50">
+                <div className="text-2xl font-bold text-gray-900">12</div>
+                <div className="text-gray-600 text-sm mt-1">智能算法</div>
+              </div>
+              <div className="text-center p-4 rounded-lg border border-gray-200 bg-gray-50">
+                <div className="text-2xl font-bold text-gray-900">24/7</div>
+                <div className="text-gray-600 text-sm mt-1">实时更新</div>
               </div>
             </div>
           </div>
@@ -134,14 +123,14 @@ function Prediction() {
             onClick={handleRefreshAll} 
             variant="outline" 
             size="sm"
-            className="w-full sm:hidden"
+            className="w-full sm:hidden border-gray-300"
           >
             <RefreshCw className="w-4 h-4 mr-2" />
             刷新全部数据
           </Button>
 
           {/* 预测系统卡片 */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {systems.map((system) => {
               const bestAlgo = getBestAlgorithm(system.algorithms);
               const totalAlgos = system.algorithms?.length || 0;
@@ -149,62 +138,67 @@ function Prediction() {
               return (
                 <Card 
                   key={system.id}
-                  className={`overflow-hidden border-2 ${system.borderColor} hover:shadow-2xl transition-all duration-300 cursor-pointer group`}
+                  className="border border-gray-200 hover:shadow-xl transition-all duration-300 cursor-pointer group"
                   onClick={() => navigate(system.path)}
                 >
-                  <CardHeader className={`bg-gradient-to-br ${system.bgGradient} pb-4`}>
-                    <CardTitle className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-3xl">{system.icon}</span>
-                        <span className={`text-xl font-bold ${system.textColor}`}>
-                          {system.name}
-                        </span>
+                  <CardContent className="pt-6">
+                    {/* 标题 */}
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${system.iconGradient} flex items-center justify-center text-2xl shadow-lg`}>
+                          {system.icon}
+                        </div>
+                        <div>
+                          <h3 className="text-xl font-bold text-gray-900">
+                            {system.name}
+                          </h3>
+                          <p className="text-gray-500 text-xs">{system.nameEn}</p>
+                        </div>
                       </div>
-                      <ChevronRight className={`w-5 h-5 ${system.textColor} group-hover:translate-x-1 transition-transform`} />
-                    </CardTitle>
-                    <CardDescription className="text-gray-600 text-sm mt-2">
-                      {system.description}
-                    </CardDescription>
-                  </CardHeader>
+                      <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-gray-900 group-hover:translate-x-1 transition-all" />
+                    </div>
 
-                  <CardContent className="pt-6 space-y-4">
+                    {/* 描述 */}
+                    <p className="text-gray-600 text-sm mb-4 line-clamp-2">
+                      {system.description}
+                    </p>
+
                     {system.loading ? (
                       <div className="space-y-3">
                         <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
                         <div className="h-4 bg-gray-200 rounded animate-pulse w-3/4"></div>
-                        <div className="h-4 bg-gray-200 rounded animate-pulse w-1/2"></div>
                       </div>
                     ) : bestAlgo ? (
                       <>
                         {/* 最佳算法 */}
-                        <div className={`p-4 rounded-lg bg-gradient-to-r ${system.gradient} text-white`}>
+                        <div className="p-4 rounded-lg border border-gray-200 bg-gray-50 mb-4">
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2">
-                              <Award className="w-5 h-5" />
-                              <span className="font-semibold">最佳算法</span>
+                              <Award className="w-4 h-4 text-yellow-500" />
+                              <span className="text-sm font-semibold text-gray-700">最佳算法</span>
                             </div>
-                            <Badge className="bg-white/20 text-white border-white/30">
+                            <Badge variant="outline" className="border-gray-300 text-gray-700">
                               {bestAlgo.algorithm}
                             </Badge>
                           </div>
-                          <div className="text-3xl font-bold">
+                          <div className="text-3xl font-bold text-gray-900">
                             {bestAlgo.accuracy_rate}%
                           </div>
-                          <div className="text-sm text-white/80 mt-1">
+                          <div className="text-xs text-gray-600 mt-1">
                             准确率 ({bestAlgo.correct_predictions}/{bestAlgo.total_predictions})
                           </div>
                         </div>
 
                         {/* 算法统计 */}
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="text-center p-3 bg-gray-50 rounded-lg">
-                            <div className="text-2xl font-bold text-gray-800">
+                        <div className="grid grid-cols-2 gap-3 mb-4">
+                          <div className="text-center p-3 bg-gray-50 rounded-lg border border-gray-200">
+                            <div className="text-xl font-bold text-gray-900">
                               {totalAlgos}
                             </div>
                             <div className="text-xs text-gray-600">算法数量</div>
                           </div>
-                          <div className="text-center p-3 bg-gray-50 rounded-lg">
-                            <div className="text-2xl font-bold text-green-600">
+                          <div className="text-center p-3 bg-gray-50 rounded-lg border border-gray-200">
+                            <div className="text-xl font-bold text-green-600">
                               {bestAlgo.total_predictions}
                             </div>
                             <div className="text-xs text-gray-600">总预测数</div>
@@ -218,9 +212,9 @@ function Prediction() {
                             算法准确率排名
                           </div>
                           {system.algorithms.slice(0, 4).map((algo, idx) => (
-                            <div key={algo.algorithm_id} className="flex items-center justify-between text-sm">
+                            <div key={algo.algorithm_id} className="flex items-center justify-between text-sm py-1">
                               <div className="flex items-center gap-2">
-                                <span className="text-xs font-mono text-gray-500">
+                                <span className="text-base">
                                   {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🎖️'}
                                 </span>
                                 <span className="text-gray-700">{algo.algorithm}</span>
@@ -238,7 +232,7 @@ function Prediction() {
 
                         {/* 查看详情按钮 */}
                         <Button 
-                          className={`w-full bg-gradient-to-r ${system.gradient} text-white hover:opacity-90`}
+                          className="w-full mt-4 bg-gray-900 text-white hover:bg-gray-800"
                           onClick={(e) => {
                             e.stopPropagation();
                             navigate(system.path);
@@ -261,51 +255,47 @@ function Prediction() {
           </div>
 
           {/* 功能说明 */}
-          <Card className="border-0 shadow-lg">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Zap className="w-5 h-5 text-yellow-500" />
-                系统特色
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="space-y-2">
-                  <div className="w-12 h-12 rounded-lg bg-purple-100 flex items-center justify-center mb-3">
-                    <TrendingUp className="w-6 h-6 text-purple-600" />
-                  </div>
-                  <h3 className="font-semibold text-gray-800">智能算法</h3>
-                  <p className="text-sm text-gray-600">
-                    采用多种先进预测算法，综合分析历史数据，提供高准确率的预测结果
-                  </p>
+          <div className="border border-gray-200 rounded-lg p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <TrendingUp className="w-5 h-5" />
+              系统特色
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-2">
+                <div className="w-12 h-12 rounded-lg border border-gray-200 bg-gray-50 flex items-center justify-center mb-3">
+                  <TrendingUp className="w-6 h-6 text-gray-900" />
                 </div>
-                <div className="space-y-2">
-                  <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center mb-3">
-                    <Activity className="w-6 h-6 text-blue-600" />
-                  </div>
-                  <h3 className="font-semibold text-gray-800">实时更新</h3>
-                  <p className="text-sm text-gray-600">
-                    24/7 实时监控开奖数据，自动验证预测结果，动态更新算法准确率
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <div className="w-12 h-12 rounded-lg bg-green-100 flex items-center justify-center mb-3">
-                    <Award className="w-6 h-6 text-green-600" />
-                  </div>
-                  <h3 className="font-semibold text-gray-800">数据透明</h3>
-                  <p className="text-sm text-gray-600">
-                    所有预测记录公开透明，支持历史数据查询，算法性能一目了然
-                  </p>
-                </div>
+                <h3 className="font-semibold text-gray-900">智能算法</h3>
+                <p className="text-sm text-gray-600">
+                  采用多种先进预测算法，综合分析历史数据，提供高准确率的预测结果
+                </p>
               </div>
-            </CardContent>
-          </Card>
+              <div className="space-y-2">
+                <div className="w-12 h-12 rounded-lg border border-gray-200 bg-gray-50 flex items-center justify-center mb-3">
+                  <Activity className="w-6 h-6 text-gray-900" />
+                </div>
+                <h3 className="font-semibold text-gray-900">实时更新</h3>
+                <p className="text-sm text-gray-600">
+                  24/7 实时监控开奖数据，自动验证预测结果，动态更新算法准确率
+                </p>
+              </div>
+              <div className="space-y-2">
+                <div className="w-12 h-12 rounded-lg border border-gray-200 bg-gray-50 flex items-center justify-center mb-3">
+                  <Award className="w-6 h-6 text-gray-900" />
+                </div>
+                <h3 className="font-semibold text-gray-900">数据透明</h3>
+                <p className="text-sm text-gray-600">
+                  所有预测记录公开透明，支持历史数据查询，算法性能一目了然
+                </p>
+              </div>
+            </div>
+          </div>
 
           {/* 使用提示 */}
-          <div className="bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-200 rounded-lg p-4">
+          <div className="border-l-4 border-blue-500 bg-blue-50 p-4 rounded-r-lg">
             <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <span className="text-white text-lg">💡</span>
+              <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <span className="text-white text-sm">💡</span>
               </div>
               <div className="flex-1">
                 <h4 className="font-semibold text-blue-900 mb-1">使用提示</h4>
@@ -323,4 +313,3 @@ function Prediction() {
 }
 
 export default Prediction;
-
