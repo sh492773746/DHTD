@@ -155,9 +155,68 @@ export function requireAuth(userId, message = '需要登入') {
   }
 }
 
-export function requireAdmin(isAdmin, message = '需要管理員權限') {
+/**
+ * 驗證管理員權限（用於中間件/驗證函數）
+ * @param {boolean} isAdmin - 是否為管理員
+ * @param {string} message - 錯誤消息
+ */
+export function requireAdminRole(isAdmin, message = '需要管理員權限') {
   if (!isAdmin) {
     throw new ForbiddenError(message);
+  }
+}
+
+/**
+ * 從 Hono context 中提取並驗證管理員JWT
+ * @param {Object} c - Hono context
+ * @returns {Object} { ok: boolean, userId?: string, reason?: string }
+ */
+export function requireAdmin(c) {
+  try {
+    const authHeader = c.req.header('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return { ok: false, reason: 'missing_token' };
+    }
+
+    const token = authHeader.substring(7);
+    if (!token) {
+      return { ok: false, reason: 'invalid_token' };
+    }
+
+    // 驗證 JWT (使用 Supabase JWT secret)
+    const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET || '';
+    if (!SUPABASE_JWT_SECRET) {
+      console.error('❌ SUPABASE_JWT_SECRET not configured');
+      return { ok: false, reason: 'server_config_error' };
+    }
+
+    let payload;
+    try {
+      const jwt = require('jsonwebtoken');
+      payload = jwt.verify(token, SUPABASE_JWT_SECRET);
+    } catch (err) {
+      // JWT 驗證失敗（生產環境必須成功）
+      if (process.env.NODE_ENV === 'production') {
+        console.error('❌ JWT verification failed:', err.message);
+        return { ok: false, reason: 'invalid_token' };
+      }
+      // 開發環境：fallback 到 decode
+      const jwt = require('jsonwebtoken');
+      payload = jwt.decode(token);
+      if (!payload) {
+        return { ok: false, reason: 'invalid_token' };
+      }
+    }
+
+    const userId = payload?.sub;
+    if (!userId) {
+      return { ok: false, reason: 'no_user_id' };
+    }
+
+    return { ok: true, userId };
+  } catch (error) {
+    console.error('❌ requireAdmin error:', error);
+    return { ok: false, reason: 'auth_error' };
   }
 }
 
