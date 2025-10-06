@@ -23,7 +23,7 @@ function PredictionBit28() {
       .slice(0, 100);
     
     const total = algorithmPredictions.length;
-    const correct = algorithmPredictions.filter(p => p.result === '對').length;
+    const correct = algorithmPredictions.filter(p => p.result === '对').length;
     const accuracy = total > 0 ? (correct / total * 100).toFixed(2) : 0;
     
     return { total, correct, accuracy };
@@ -181,9 +181,9 @@ function PredictionBit28() {
                               )}
                             </td>
                             <td className="py-3 px-2 sm:px-4">
-                              {pred.result === '對' ? (
+                              {pred.result === '对' ? (
                                 <span className="text-green-600 font-bold">✓ 对</span>
-                              ) : pred.result === '錯' ? (
+                              ) : pred.result === '错' ? (
                                 <span className="text-red-600 font-bold">✗ 错</span>
                               ) : (
                                 <span className="text-gray-400">-</span>
