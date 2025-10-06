@@ -11,6 +11,7 @@ import TenantAdminLayout from '@/components/TenantAdminLayout';
 
 // Main Pages
 import SocialFeed from '@/pages/SocialFeed';
+import Prediction from '@/pages/Prediction';
 import PredictionJnd28 from '@/pages/PredictionJnd28';
 import PredictionFf28 from '@/pages/PredictionFf28';
 import PredictionBit28 from '@/pages/PredictionBit28';
@@ -82,6 +83,10 @@ const routerConfig = [
           {
             path: 'social',
             element: <SocialFeed />,
+          },
+          {
+            path: 'prediction',
+            element: <ProtectedRoute><Prediction /></ProtectedRoute>,
           },
           {
             path: 'prediction/jnd28',

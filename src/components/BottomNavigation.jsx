@@ -39,6 +39,7 @@ const BottomNavigation = () => {
   ];
 
   const predictionItems = [
+    { label: '🎯 预测中心', path: '/prediction', icon: BrainCircuit, highlight: true },
     { label: '加拿大28预测', path: '/prediction/jnd28', icon: BarChart2 },
     { label: '分分28预测', path: '/prediction/ff28', icon: TrendingUp },
     { label: '比特28预测', path: '/prediction/bit28', icon: Zap },
@@ -100,8 +101,11 @@ const BottomNavigation = () => {
               {predictionItems.map((predItem) => (
                 <Button
                   key={predItem.label}
-                  variant="ghost"
-                  className="w-full justify-start"
+                  variant={predItem.highlight ? "default" : "ghost"}
+                  className={cn(
+                    "w-full justify-start",
+                    predItem.highlight && "bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700"
+                  )}
                   onClick={() => {
                     navigate(predItem.path);
                     setIsPredictionOpen(false);

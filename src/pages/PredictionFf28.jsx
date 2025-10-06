@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { RefreshCw, TrendingUp, Award } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { RefreshCw, TrendingUp, Award, ArrowLeft } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +10,7 @@ import { usePredictions, useAlgorithmCompare } from '@/hooks/usePredictionAPI';
 
 function PredictionFf28() {
   const { siteSettings } = useAuth();
+  const navigate = useNavigate();
   const [selectedAlgorithm, setSelectedAlgorithm] = useState(null);
   
   const { data: predictions, loading: predictionsLoading, refetch: refetchPredictions } = usePredictions('ff28');
@@ -45,20 +47,56 @@ function PredictionFf28() {
         <meta name="description" content="分分28算法预测与准确率统计" />
       </Helmet>
       
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-cyan-50 to-teal-50 p-4">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-cyan-50 to-teal-50 p-4 pb-24">
         <div className="max-w-6xl mx-auto space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
-                ⚡ 分分28预测
-              </h1>
-              <p className="text-gray-600 mt-1 text-sm">基于最新100条数据的算法准确率统计</p>
+          {/* 返回按钮 */}
+          <Button 
+            onClick={() => navigate('/prediction')} 
+            variant="ghost" 
+            size="sm"
+            className="mb-2 text-blue-600 hover:text-blue-700 hover:bg-blue-100"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            返回预测中心
+          </Button>
+
+          {/* 顶部标题横幅 */}
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-cyan-600 to-teal-600 p-6 text-white shadow-xl">
+            <div className="absolute top-0 right-0 w-40 h-40 bg-white opacity-10 rounded-full -mr-20 -mt-20"></div>
+            <div className="relative z-10">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="text-4xl">⚡</span>
+                    <h1 className="text-2xl sm:text-3xl font-bold">
+                      分分28预测
+                    </h1>
+                  </div>
+                  <p className="text-blue-100 text-sm">基于最新100条已验证数据的算法准确率统计</p>
+                </div>
+                <Button 
+                  onClick={handleRefresh} 
+                  variant="secondary" 
+                  size="sm"
+                  className="hidden sm:flex"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  刷新
+                </Button>
+              </div>
             </div>
-            <Button onClick={handleRefresh} variant="outline" size="sm">
-              <RefreshCw className="w-4 h-4 mr-2" />
-              刷新
-            </Button>
           </div>
+
+          {/* 移动端刷新按钮 */}
+          <Button 
+            onClick={handleRefresh} 
+            variant="outline" 
+            size="sm"
+            className="w-full sm:hidden"
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            刷新数据
+          </Button>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {algorithmsLoading ? (
