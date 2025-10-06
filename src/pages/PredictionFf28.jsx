@@ -36,6 +36,7 @@ function PredictionFf28() {
     refetchAlgorithms();
   };
 
+  // 获取选中算法的预测记录
   const filteredPredictions = selectedAlgorithm 
     ? predictions.filter(p => p.algorithm === selectedAlgorithm).slice(0, 20)
     : [];
@@ -47,43 +48,45 @@ function PredictionFf28() {
         <meta name="description" content="分分28算法预测与准确率统计" />
       </Helmet>
       
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-cyan-50 to-teal-50 p-4 pb-24">
-        <div className="max-w-6xl mx-auto space-y-4">
+      <div className="min-h-screen bg-white p-4 pb-24">
+        <div className="max-w-6xl mx-auto space-y-6">
           {/* 返回按钮 */}
           <Button 
             onClick={() => navigate('/prediction')} 
             variant="ghost" 
             size="sm"
-            className="mb-2 text-blue-600 hover:text-blue-700 hover:bg-blue-100"
+            className="mb-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             返回预测中心
           </Button>
 
-          {/* 顶部标题横幅 */}
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-cyan-600 to-teal-600 p-6 text-white shadow-xl">
-            <div className="absolute top-0 right-0 w-40 h-40 bg-white opacity-10 rounded-full -mr-20 -mt-20"></div>
-            <div className="relative z-10">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="text-4xl">⚡</span>
-                    <h1 className="text-2xl sm:text-3xl font-bold">
+          {/* 顶部标题 */}
+          <div className="border-b border-gray-200 pb-6">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center text-2xl shadow-lg">
+                    ⚡
+                  </div>
+                  <div>
+                    <h1 className="text-3xl sm:text-4xl font-bold text-gray-900">
                       分分28预测
                     </h1>
+                    <p className="text-gray-500 text-sm mt-1">Fenfen 28 Prediction</p>
                   </div>
-                  <p className="text-blue-100 text-sm">基于最新100条已验证数据的算法准确率统计</p>
                 </div>
-                <Button 
-                  onClick={handleRefresh} 
-                  variant="secondary" 
-                  size="sm"
-                  className="hidden sm:flex"
-                >
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  刷新
-                </Button>
+                <p className="text-gray-600 text-sm">基于最新100条已验证数据的智能算法分析与准确率统计</p>
               </div>
+              <Button 
+                onClick={handleRefresh} 
+                variant="outline" 
+                size="sm"
+                className="hidden sm:flex border-gray-300 hover:border-gray-400"
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                刷新数据
+              </Button>
             </div>
           </div>
 
@@ -92,12 +95,13 @@ function PredictionFf28() {
             onClick={handleRefresh} 
             variant="outline" 
             size="sm"
-            className="w-full sm:hidden"
+            className="w-full sm:hidden border-gray-300"
           >
             <RefreshCw className="w-4 h-4 mr-2" />
             刷新数据
           </Button>
 
+          {/* 算法卡片 */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {algorithmsLoading ? (
               Array(4).fill(0).map((_, i) => (
@@ -111,35 +115,34 @@ function PredictionFf28() {
             ) : algorithms && algorithms.length > 0 ? (
               algorithms.slice(0, 4).map((algo, index) => {
                 const stats = getAlgorithmStats(algo.algorithm);
-                const colors = [
-                  { bg: 'bg-green-50 border-green-300', text: 'text-green-700', gradient: 'from-green-400 to-green-600' },
-                  { bg: 'bg-blue-50 border-blue-300', text: 'text-blue-700', gradient: 'from-blue-400 to-blue-600' },
-                  { bg: 'bg-purple-50 border-purple-300', text: 'text-purple-700', gradient: 'from-purple-400 to-purple-600' },
-                  { bg: 'bg-pink-50 border-pink-300', text: 'text-pink-700', gradient: 'from-pink-400 to-pink-600' },
-                ];
-                const color = colors[index];
                 const isSelected = selectedAlgorithm === algo.algorithm;
+                
+                const medalIcons = ['🥇', '🥈', '🥉', '🎖️'];
 
                 return (
                   <Card
                     key={algo.algorithm_id}
-                    className={`cursor-pointer transition-all hover:shadow-xl border-2 ${
-                      isSelected ? 'ring-2 ring-offset-2 ring-blue-500 scale-105' : color.bg
+                    className={`cursor-pointer transition-all duration-200 ${
+                      isSelected 
+                        ? 'shadow-2xl border-2 border-black scale-105' 
+                        : 'shadow-md hover:shadow-xl border border-gray-200 hover:border-gray-300'
                     }`}
                     onClick={() => setSelectedAlgorithm(isSelected ? null : algo.algorithm)}
                   >
                     <CardContent className="pt-4 sm:pt-6">
-                      <div className="flex items-center gap-2 mb-3">
-                        {index === 0 && <Award className="w-5 h-5 text-yellow-500" />}
-                        {index === 1 && <Award className="w-5 h-5 text-gray-400" />}
-                        {index === 2 && <Award className="w-5 h-5 text-orange-600" />}
-                        {index === 3 && <TrendingUp className="w-5 h-5 text-purple-500" />}
-                        <h3 className={`font-bold text-sm sm:text-base ${color.text}`}>
-                          {algo.algorithm}
-                        </h3>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl">{medalIcons[index]}</span>
+                          <h3 className="font-bold text-sm sm:text-base text-gray-900">
+                            {algo.algorithm}
+                          </h3>
+                        </div>
+                        {isSelected && (
+                          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                        )}
                       </div>
                       
-                      <div className={`text-3xl sm:text-4xl font-bold bg-gradient-to-r ${color.gradient} bg-clip-text text-transparent mb-3`}>
+                      <div className="text-3xl sm:text-4xl font-bold text-gray-900 mb-3">
                         {stats.accuracy}%
                       </div>
                       
@@ -172,14 +175,19 @@ function PredictionFf28() {
             )}
           </div>
 
+          {/* 预测记录 */}
           {selectedAlgorithm && (
-            <Card className="border-0 shadow-xl bg-white">
-              <CardHeader>
+            <Card className="border border-gray-200 shadow-lg bg-white">
+              <CardHeader className="border-b border-gray-200">
                 <CardTitle className="flex items-center justify-between text-base sm:text-lg">
-                  <span>📊 {selectedAlgorithm} - 最近20条预测记录</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-1 h-6 bg-black rounded-full"></div>
+                    <span className="font-bold text-gray-900">{selectedAlgorithm} - 最近20条预测记录</span>
+                  </div>
                   <Button 
                     variant="ghost" 
                     size="sm"
+                    className="text-gray-600 hover:text-gray-900"
                     onClick={() => setSelectedAlgorithm(null)}
                   >
                     关闭
@@ -245,4 +253,3 @@ function PredictionFf28() {
 }
 
 export default PredictionFf28;
-

@@ -65,7 +65,7 @@ async function callPredictionAPI(endpoint, params = {}) {
 }
 
 // Hook: 獲取預測記錄
-export function usePredictions(system = 'jnd28') {
+export function usePredictions(system = 'jnd28', limit = 100) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -79,7 +79,8 @@ export function usePredictions(system = 'jnd28') {
         ? '/api/predictions' 
         : `/api/${system}/predictions`;
 
-      const result = await callPredictionAPI(endpoint);
+      // 添加 limit 参数获取更多数据
+      const result = await callPredictionAPI(endpoint, { limit });
       setData(result || []);
     } catch (err) {
       setError(err.message);
@@ -87,7 +88,7 @@ export function usePredictions(system = 'jnd28') {
     } finally {
       setLoading(false);
     }
-  }, [system]);
+  }, [system, limit]);
 
   useEffect(() => {
     fetchData();
