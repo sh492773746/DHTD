@@ -2922,27 +2922,54 @@ app.get('/api/admin/page-content', async (c) => {
     const tenantIdParam = Number(c.req.query('tenantId') || NaN);
     const tenantId = Number.isFinite(tenantIdParam) ? tenantIdParam : resolvedTenantId;
 
-    // 权限：超管或该租户的租管
-    const allowed = await canManageTenant(auth.userId, tenantId);
-    if (!allowed) return c.json({ error: 'forbidden' }, 403);
-
     const page = c.req.query('page');
     const section = c.req.query('section');
 
-    if (!page || !section) return c.json([]);
+    console.log('📄 GET /api/admin/page-content:', {
+      host,
+      resolvedTenantId,
+      tenantIdParam,
+      finalTenantId: tenantId,
+      page,
+      section,
+      userId: auth.userId
+    });
+
+    // 权限：超管或该租户的租管
+    const allowed = await canManageTenant(auth.userId, tenantId);
+    if (!allowed) {
+      console.log('❌ 權限不足:', { userId: auth.userId, tenantId });
+      return c.json({ error: 'forbidden' }, 403);
+    }
+
+    if (!page || !section) {
+      console.log('⚠️ 缺少參數:', { page, section });
+      return c.json([]);
+    }
+    
     const pageDef = pageConfig?.[page];
     const secDef = pageDef?.sections?.find(s => s.id === section);
     const forceGlobal = !!secDef?.globalOnly;
     const targetTenantId = forceGlobal ? 0 : tenantId;
+    
+    console.log('🔍 查詢數據庫:', {
+      page,
+      section,
+      targetTenantId,
+      forceGlobal
+    });
+    
     const db = await getTursoClientForTenant(targetTenantId);
     const rows = await db
       .select()
       .from(pageContentTable)
       .where(and(eq(pageContentTable.page, page), eq(pageContentTable.section, section), eq(pageContentTable.tenantId, targetTenantId)))
       .orderBy(pageContentTable.position);
+    
+    console.log('✅ 查詢結果:', { count: rows?.length || 0 });
     return c.json(rows || []);
   } catch (e) {
-    console.error('GET /api/admin/page-content error', e);
+    console.error('❌ GET /api/admin/page-content error', e);
     return c.json([]);
   }
 });
