@@ -11,7 +11,9 @@ import TenantAdminLayout from '@/components/TenantAdminLayout';
 
 // Main Pages
 import SocialFeed from '@/pages/SocialFeed';
-import Prediction from '@/pages/Prediction';
+import PredictionJnd28 from '@/pages/PredictionJnd28';
+import PredictionFf28 from '@/pages/PredictionFf28';
+import PredictionBit28 from '@/pages/PredictionBit28';
 import PredictionGame from '@/pages/PredictionGame';
 import Profile from '@/pages/Profile';
 import EditProfile from '@/pages/EditProfile';
@@ -82,8 +84,16 @@ const routerConfig = [
             element: <SocialFeed />,
           },
           {
-            path: 'prediction',
-            element: <ProtectedRoute><Prediction /></ProtectedRoute>,
+            path: 'prediction/jnd28',
+            element: <ProtectedRoute><PredictionJnd28 /></ProtectedRoute>,
+          },
+          {
+            path: 'prediction/ff28',
+            element: <ProtectedRoute><PredictionFf28 /></ProtectedRoute>,
+          },
+          {
+            path: 'prediction/bit28',
+            element: <ProtectedRoute><PredictionBit28 /></ProtectedRoute>,
           },
           {
             path: 'games',

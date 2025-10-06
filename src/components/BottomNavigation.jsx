@@ -39,9 +39,9 @@ const BottomNavigation = () => {
   ];
 
   const predictionItems = [
-    { label: '加拿大28预测', path: '/prediction', icon: BarChart2 },
-    { label: '分分28预测', path: '#', icon: TrendingUp, notImplemented: true },
-    { label: '比特28预测', path: '#', icon: Zap, notImplemented: true },
+    { label: '加拿大28预测', path: '/prediction/jnd28', icon: BarChart2 },
+    { label: '分分28预测', path: '/prediction/ff28', icon: TrendingUp },
+    { label: '比特28预测', path: '/prediction/bit28', icon: Zap },
   ];
   
   const handleNotImplemented = (label) => {
@@ -67,7 +67,7 @@ const BottomNavigation = () => {
 
   const renderNavItem = (item, index) => {
     if (item.type === 'popover') {
-      const isActive = location.pathname === '/prediction';
+      const isActive = location.pathname.startsWith('/prediction');
       return (
         <Popover key={item.label} open={isPredictionOpen} onOpenChange={setIsPredictionOpen}>
           <PopoverTrigger asChild>
@@ -103,11 +103,7 @@ const BottomNavigation = () => {
                   variant="ghost"
                   className="w-full justify-start"
                   onClick={() => {
-                    if (predItem.notImplemented) {
-                      handleNotImplemented(predItem.label);
-                    } else {
-                      navigate(predItem.path);
-                    }
+                    navigate(predItem.path);
                     setIsPredictionOpen(false);
                   }}
                 >
