@@ -64,8 +64,9 @@ async function callPredictionAPI(endpoint, params = {}) {
   }
 }
 
-// Hook: 獲取預測記錄（获取足够多的数据以确保每个算法都有20条）
-export function usePredictions(system = 'jnd28', limit = 200) {
+// Hook: 獲取預測記錄
+// 注意：外部API限制只返回20条数据（每个算法约5条），不支持limit参数
+export function usePredictions(system = 'jnd28') {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -79,8 +80,8 @@ export function usePredictions(system = 'jnd28', limit = 200) {
         ? '/api/predictions' 
         : `/api/${system}/predictions`;
 
-      // 获取200条数据，确保每个算法（4个）都有至少50条记录可用
-      const result = await callPredictionAPI(endpoint, { limit });
+      // 外部API固定返回20条最新数据，不支持分页或limit参数
+      const result = await callPredictionAPI(endpoint);
       setData(result || []);
     } catch (err) {
       setError(err.message);
@@ -88,7 +89,7 @@ export function usePredictions(system = 'jnd28', limit = 200) {
     } finally {
       setLoading(false);
     }
-  }, [system, limit]);
+  }, [system]);
 
   useEffect(() => {
     fetchData();

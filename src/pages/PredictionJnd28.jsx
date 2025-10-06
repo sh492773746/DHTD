@@ -36,9 +36,9 @@ function PredictionJnd28() {
     refetchAlgorithms();
   };
 
-  // 获取选中算法的预测记录
+  // 获取选中算法的预测记录（API限制每个算法约5-10条）
   const filteredPredictions = selectedAlgorithm 
-    ? predictions.filter(p => p.algorithm === selectedAlgorithm).slice(0, 20)
+    ? predictions.filter(p => p.algorithm === selectedAlgorithm)
     : [];
 
   return (
@@ -184,7 +184,7 @@ function PredictionJnd28() {
                 <CardTitle className="flex items-center justify-between text-base sm:text-lg">
                   <div className="flex items-center gap-2">
                     <div className="w-1 h-6 bg-black rounded-full"></div>
-                    <span className="font-bold text-gray-900">{selectedAlgorithm} - 最近20条预测记录</span>
+                    <span className="font-bold text-gray-900">{selectedAlgorithm} - 预测记录 ({filteredPredictions.length}条)</span>
                   </div>
                   <Button 
                     variant="ghost" 
