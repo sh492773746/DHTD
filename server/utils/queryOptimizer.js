@@ -2,7 +2,7 @@
 // 批量獲取關聯數據，避免循環查詢數據庫
 
 import { eq, inArray, sql } from 'drizzle-orm';
-import cache, { CacheKeys } from './cache.js';
+import { getCache, setCache, deleteCache, cached, getCacheStats, CacheKeys } from './cache.js';
 
 // 批量獲取用戶資料（解決 N+1）
 export async function batchGetProfiles(db, userIds, profilesTable) {
@@ -12,9 +12,9 @@ export async function batchGetProfiles(db, userIds, profilesTable) {
   
   // 嘗試從緩存批量獲取
   const cacheKey = CacheKeys.userProfiles(uniqueIds);
-  const cached = await cache.get(cacheKey);
-  if (cached) {
-    return new Map(cached);
+  const cachedData = await getCache(cacheKey);
+  if (cachedData) {
+    return new Map(cachedData);
   }
   
   // 一次性查詢所有用戶
@@ -35,7 +35,7 @@ export async function batchGetProfiles(db, userIds, profilesTable) {
   }
   
   // 緩存結果（5 分鐘）
-  await cache.set(cacheKey, Array.from(profileMap.entries()), 5 * 60 * 1000);
+  await setCache(cacheKey, Array.from(profileMap.entries()), 5 * 60 * 1000);
   
   return profileMap;
 }
@@ -136,7 +136,7 @@ export async function enrichPostsOptimized(db, posts, likesTable, commentsTable,
 export async function getCachedSettings(db, settingsTable, tenantId) {
   const cacheKey = CacheKeys.settings(tenantId);
   
-  return await cache.cached(cacheKey, async () => {
+  return await cached(cacheKey, async () => {
     const rows = await db
       .select()
       .from(settingsTable)
@@ -156,7 +156,7 @@ export async function getCachedSettings(db, settingsTable, tenantId) {
 export async function getCachedPageContent(db, pageContentTable, tenantId, page) {
   const cacheKey = CacheKeys.pageContent(tenantId, page);
   
-  return await cache.cached(cacheKey, async () => {
+  return await cached(cacheKey, async () => {
     const rows = await db
       .select()
       .from(pageContentTable)
@@ -184,7 +184,7 @@ export async function getCachedPageContent(db, pageContentTable, tenantId, page)
 export async function getCachedTenantResolve(db, branchesTable, hostname) {
   const cacheKey = CacheKeys.tenantResolve(hostname);
   
-  return await cache.cached(cacheKey, async () => {
+  return await cached(cacheKey, async () => {
     // 查詢邏輯（這裡簡化，實際從您的代碼中提取）
     const rows = await db
       .select()
@@ -196,47 +196,8 @@ export async function getCachedTenantResolve(db, branchesTable, hostname) {
   }, 30 * 60 * 1000); // 緩存 30 分鐘（域名很少變）
 }
 
-// 清理過期的內存緩存（定時任務）
-setInterval(() => {
-  const now = Date.now();
-  let cleaned = 0;
-  
-  for (const [key, entry] of memoryCache.entries()) {
-    if (now >= entry.expiresAt) {
-      memoryCache.delete(key);
-      const idx = cacheAccessOrder.indexOf(key);
-      if (idx > -1) cacheAccessOrder.splice(idx, 1);
-      cleaned++;
-    }
-  }
-  
-  if (cleaned > 0) {
-    console.log(`🧹 清理了 ${cleaned} 個過期緩存項`);
-  }
-}, 5 * 60 * 1000); // 每 5 分鐘清理一次
-
-// 性能統計
-export function logCachePerformance() {
-  const stats = getCacheStats();
-  console.log('📊 緩存性能統計:', {
-    命中率: stats.hitRate,
-    總命中: stats.hits,
-    內存命中: stats.memoryHits,
-    Redis命中: stats.redisHits,
-    未命中: stats.misses,
-    緩存大小: `${stats.memorySize}/${stats.maxMemorySize}`,
-  });
-}
-
-// 每小時輸出統計
-setInterval(logCachePerformance, 60 * 60 * 1000);
-
+// 導出所有優化函數
 export default {
-  get: getCache,
-  set: setCache,
-  delete: deleteCache,
-  deletePattern: deleteCachePattern,
-  cached,
   batchGetProfiles,
   batchGetPostStats,
   batchCheckUserLikes,
@@ -244,9 +205,5 @@ export default {
   getCachedSettings,
   getCachedPageContent,
   getCachedTenantResolve,
-  stats: getCacheStats,
-  clear: clearAllCache,
-  warmup: warmupCache,
-  keys: CacheKeys,
 };
 
