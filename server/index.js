@@ -603,7 +603,22 @@ app.get('/api/prediction-proxy/*', async (c) => {
     
     // 转换外部 API 的响应格式
     if (data.status === 'success') {
-      return c.json({ success: true, data: data.data });
+      // 针对不同端点返回不同的数据结构
+      let responseData;
+      
+      if (data.data !== undefined) {
+        // /api/predictions, /api/*/predictions 等端点有 data 字段
+        responseData = data.data;
+      } else if (data.algorithms !== undefined) {
+        // /api/algorithm/compare 端点返回 algorithms 数组
+        responseData = data.algorithms;
+      } else {
+        // 其他端点，移除 status 后返回所有数据
+        const { status, ...rest } = data;
+        responseData = rest;
+      }
+      
+      return c.json({ success: true, data: responseData });
     } else {
       return c.json({ success: false, error: data.message || 'Unknown error' }, 400);
     }
