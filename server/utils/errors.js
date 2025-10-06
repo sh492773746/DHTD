@@ -168,49 +168,24 @@ export function requireAdminRole(isAdmin, message = '需要管理員權限') {
 
 /**
  * 從 Hono context 中提取並驗證管理員JWT
+ * 注意：依賴全局 middleware 已完成的 JWKS JWT 驗證
+ * middleware 已將 userId 存儲在 c.get('userId')
  * @param {Object} c - Hono context
  * @returns {Object} { ok: boolean, userId?: string, reason?: string }
  */
 export function requireAdmin(c) {
   try {
-    const authHeader = c.req.header('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return { ok: false, reason: 'missing_token' };
-    }
-
-    const token = authHeader.substring(7);
-    if (!token) {
-      return { ok: false, reason: 'invalid_token' };
-    }
-
-    // 驗證 JWT (使用 Supabase JWT secret)
-    const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET || '';
-    if (!SUPABASE_JWT_SECRET) {
-      console.error('❌ SUPABASE_JWT_SECRET not configured');
-      return { ok: false, reason: 'server_config_error' };
-    }
-
-    let payload;
-    try {
-      const jwt = require('jsonwebtoken');
-      payload = jwt.verify(token, SUPABASE_JWT_SECRET);
-    } catch (err) {
-      // JWT 驗證失敗（生產環境必須成功）
-      if (process.env.NODE_ENV === 'production') {
-        console.error('❌ JWT verification failed:', err.message);
-        return { ok: false, reason: 'invalid_token' };
-      }
-      // 開發環境：fallback 到 decode
-      const jwt = require('jsonwebtoken');
-      payload = jwt.decode(token);
-      if (!payload) {
-        return { ok: false, reason: 'invalid_token' };
-      }
-    }
-
-    const userId = payload?.sub;
+    // 從 context 獲取已驗證的 userId（由 middleware 設置）
+    const userId = c.get('userId');
+    
     if (!userId) {
-      return { ok: false, reason: 'no_user_id' };
+      // 檢查是否有 Authorization header
+      const authHeader = c.req.header('authorization');
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return { ok: false, reason: 'missing_token' };
+      }
+      // Token 存在但驗證失敗（middleware 未設置 userId）
+      return { ok: false, reason: 'invalid_token' };
     }
 
     return { ok: true, userId };
