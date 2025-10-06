@@ -120,10 +120,10 @@ const PageContentManager = () => {
     });
 
     const { data: categoryOptions } = useQuery({
-        queryKey: ['gameCategories'],
+        queryKey: ['gameCategories', managedTenantId],
         queryFn: () => fetchGameCategories(token),
         enabled: isInitialized,
-        staleTime: Infinity,
+        staleTime: 5 * 60 * 1000, // 5分钟后重新获取
     });
 
     const { data: managedTenantInfo } = useQuery({
@@ -136,6 +136,8 @@ const PageContentManager = () => {
         queryClient.invalidateQueries({ queryKey: ['pageContent', managedTenantId, activePage, sectionsKey, !!token] });
         queryClient.invalidateQueries({ queryKey: ['dashboardContent', managedTenantId] });
         queryClient.invalidateQueries({ queryKey: ['gamesData', managedTenantId] });
+        // 刷新游戏分类（当分类更新时，卡片的下拉选项需要同步更新）
+        queryClient.invalidateQueries({ queryKey: ['gameCategories', managedTenantId] });
         // ensure social pinned ads refresh on Social page
         queryClient.invalidateQueries({ queryKey: ['pageContent', 'social', 'pinned_ads'] });
     }, [queryClient, managedTenantId, activePage, sectionsKey, token]);
@@ -221,6 +223,62 @@ const PageContentManager = () => {
         setEditingItem(null);
         setIsFormOpen(true);
     };
+
+    const handleRemoveDuplicates = async (page, section) => {
+        const items = pageContent?.[section] || [];
+        if (items.length === 0) {
+            toast({ title: '提示', description: '没有数据可以去重' });
+            return;
+        }
+
+        // 找出重复的游戏名称
+        const titleMap = new Map();
+        const duplicates = [];
+        
+        items.forEach(item => {
+            const title = item.content?.title;
+            if (title) {
+                if (!titleMap.has(title)) {
+                    titleMap.set(title, item);
+                } else {
+                    // 发现重复，保留ID更小的（更早的）
+                    const existing = titleMap.get(title);
+                    if (item.id > existing.id) {
+                        duplicates.push(item.id);
+                    } else {
+                        duplicates.push(existing.id);
+                        titleMap.set(title, item);
+                    }
+                }
+            }
+        });
+
+        if (duplicates.length === 0) {
+            toast({ title: '提示', description: '没有发现重复的游戏名称' });
+            return;
+        }
+
+        if (!confirm(`发现 ${duplicates.length} 个重复项，确定删除吗？\n将保留每个游戏名称的第一条记录。`)) {
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            // 批量删除重复项
+            for (const id of duplicates) {
+                await bffJson(`/api/admin/page-content/${id}?tenantId=${managedTenantId}`, { token, method: 'DELETE' });
+            }
+            toast({ 
+                title: '去重成功', 
+                description: `已删除 ${duplicates.length} 个重复的游戏卡片` 
+            });
+            invalidateContentQueries();
+        } catch (e) {
+            toast({ title: '去重失败', description: e.message, variant: 'destructive' });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
     
     const isManagingSubTenant = isSuperAdmin && managedTenantId !== 0;
 
@@ -288,6 +346,7 @@ const PageContentManager = () => {
                                             onReorder={() => {}}
                                             onAddNew={() => handleAddNew(section.id)}
                                             onBatchImport={(data) => handleBatchImport(data, pageId, section.id)}
+                                            onRemoveDuplicates={() => handleRemoveDuplicates(pageId, section.id)}
                                         />
                                     ))}
                                 </div>

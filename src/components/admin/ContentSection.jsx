@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
-import { PlusCircle, Edit, Trash2, Upload } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Upload, Trash } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import BatchImportDialog from '@/components/admin/BatchImportDialog';
@@ -73,7 +73,7 @@ const MobileContentCards = ({ items, onEdit, onDelete, onToggleActive }) => (
   </div>
 );
 
-const ContentSection = ({ sectionConfig, sectionContent, onEdit, onDelete, onReorder, onAddNew, onBatchImport }) => {
+const ContentSection = ({ sectionConfig, sectionContent, onEdit, onDelete, onReorder, onAddNew, onBatchImport, onRemoveDuplicates }) => {
     const isDesktop = useMediaQuery('(min-width: 768px)');
     const itemCount = Array.isArray(sectionContent) ? sectionContent.length : 0;
     const [isImporting, setIsImporting] = useState(false);
@@ -95,7 +95,13 @@ const ContentSection = ({ sectionConfig, sectionContent, onEdit, onDelete, onReo
                         <h3 className="font-semibold text-lg text-foreground">{sectionConfig.name}</h3>
                         <p className="text-sm text-muted-foreground">{sectionConfig.description}</p>
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2 flex-wrap">
+                        {sectionConfig.id === 'game_cards' && onRemoveDuplicates && (
+                            <Button onClick={onRemoveDuplicates} size="sm" variant="outline" className="text-orange-600 hover:text-orange-700">
+                                <Trash className="mr-2 h-4 w-4" />
+                                去重
+                            </Button>
+                        )}
                         {sectionConfig.batchImport && (
                             <Button onClick={handleImportClick} size="sm" variant="outline">
                                 <Upload className="mr-2 h-4 w-4 text-foreground" />
