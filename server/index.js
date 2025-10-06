@@ -567,6 +567,52 @@ app.get('/', (c) => {
 app.get('/health', (c) => c.json({ ok: true, status: 'healthy', timestamp: new Date().toISOString() }));
 app.get('/api/health', (c) => c.json({ ok: true, status: 'healthy', timestamp: new Date().toISOString() }));
 
+// ---------- Prediction API Proxy ----------
+// 代理外部预测 API，避免 CORS 和 Mixed Content 问题
+const PREDICTION_API_BASE = 'http://156.67.218.225:5000';
+const PREDICTION_API_KEY = 'jnd28_api_key_5a738f303ae60b7183fa56773e8a3506';
+
+app.get('/api/prediction-proxy/*', async (c) => {
+  try {
+    // 从路径中提取实际的 API 端点
+    const path = c.req.path.replace('/api/prediction-proxy', '');
+    const queryString = c.req.url.split('?')[1] || '';
+    const externalUrl = `${PREDICTION_API_BASE}${path}${queryString ? '?' + queryString : ''}`;
+    
+    console.log('🔄 Proxying prediction API:', externalUrl);
+    
+    // 调用外部 API
+    const response = await fetch(externalUrl, {
+      method: 'GET',
+      headers: {
+        'X-API-Key': PREDICTION_API_KEY,
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ External API error:', response.status, errorText);
+      return c.json({ 
+        success: false, 
+        error: `External API error: ${response.status}` 
+      }, response.status);
+    }
+    
+    const data = await response.json();
+    
+    // 转换外部 API 的响应格式
+    if (data.status === 'success') {
+      return c.json({ success: true, data: data.data });
+    } else {
+      return c.json({ success: false, error: data.message || 'Unknown error' }, 400);
+    }
+  } catch (error) {
+    console.error('❌ Prediction proxy error:', error);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
+
 // Admin role helper endpoints (used by frontend to show admin entries)
 app.get('/api/admin/is-super-admin', async (c) => {
   try {

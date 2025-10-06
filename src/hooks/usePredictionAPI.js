@@ -1,33 +1,67 @@
 import { useState, useEffect, useCallback } from 'react';
 
-// 預測系統 API 配置
-const PREDICTION_API_BASE = 'http://156.67.218.225:5000';
-const PREDICTION_API_KEY = 'jnd28_api_key_5a738f303ae60b7183fa56773e8a3506';
+// 使用后端代理调用外部预测 API
+// 避免 CORS 和 Mixed Content 问题
+const USE_PROXY = true; // 是否使用后端代理
+
+// 外部预测 API 配置（仅在不使用代理时）
+const EXTERNAL_API_BASE = 'http://156.67.218.225:5000';
+const EXTERNAL_API_KEY = 'jnd28_api_key_5a738f303ae60b7183fa56773e8a3506';
 
 // 創建 API 調用函數
 async function callPredictionAPI(endpoint, params = {}) {
-  const url = new URL(`${PREDICTION_API_BASE}${endpoint}`);
-  Object.keys(params).forEach(key => url.searchParams.append(key, params[key]));
+  let url, headers;
+  
+  if (USE_PROXY) {
+    // 通过后端代理调用
+    url = new URL(`/api/prediction-proxy${endpoint}`, window.location.origin);
+    Object.keys(params).forEach(key => url.searchParams.append(key, params[key]));
+    
+    headers = {
+      'Content-Type': 'application/json',
+    };
+  } else {
+    // 直接调用外部 API（开发环境）
+    url = new URL(`${EXTERNAL_API_BASE}${endpoint}`);
+    Object.keys(params).forEach(key => url.searchParams.append(key, params[key]));
+    
+    headers = {
+      'X-API-Key': EXTERNAL_API_KEY,
+      'Content-Type': 'application/json',
+    };
+  }
+
+  console.log('📡 Fetching prediction data:', url.toString());
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: {
-      'X-API-Key': PREDICTION_API_KEY,
-      'Content-Type': 'application/json',
-    },
+    headers,
   });
 
+  console.log('📥 Response status:', response.status);
+
   if (!response.ok) {
+    const errorText = await response.text();
+    console.error('❌ API Error:', errorText);
     throw new Error(`HTTP error! status: ${response.status}`);
   }
 
   const data = await response.json();
+  console.log('✅ Response data:', data);
   
-  if (data.status !== 'success') {
-    throw new Error(data.message || '數據加載失敗');
+  if (USE_PROXY) {
+    // 后端代理返回的格式
+    if (data.success === false) {
+      throw new Error(data.error || '數據加載失敗');
+    }
+    return data.data;
+  } else {
+    // 外部 API 返回的格式
+    if (data.status !== 'success') {
+      throw new Error(data.message || '數據加載失敗');
+    }
+    return data.data;
   }
-
-  return data.data;
 }
 
 // Hook: 獲取預測記錄
