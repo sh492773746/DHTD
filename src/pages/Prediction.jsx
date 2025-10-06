@@ -1,181 +1,294 @@
-import React, { useState, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import React, { useState } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { BarChart, RefreshCw, Percent } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+import { RefreshCw } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
-import { toast } from '@/components/ui/use-toast';
+import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
+import { usePredictions, usePredictionStats, useAlgorithmCompare } from '@/hooks/usePredictionAPI';
 
-const Prediction = () => {
+function Prediction() {
   const { siteSettings } = useAuth();
-  const [activeAlgorithm, setActiveAlgorithm] = useState('算法1');
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [data, setData] = useState({
-    '算法1': {
-      accuracy: 80.00,
-      history: [
-        { id: 3320013, result: '等待结果', prediction: ['双', '大'], status: 'pending' },
-        { id: 3320012, result: '小双', prediction: ['双', '大'], status: 'correct' },
-        { id: 3320011, result: '小双', prediction: ['双', '大'], status: 'correct' },
-        { id: 3320010, result: '小单', prediction: ['双', '小'], status: 'correct' },
-        { id: 3320009, result: '大双', prediction: ['双', '小'], status: 'correct' },
-        { id: 3320008, result: '大双', prediction: ['双', '大'], status: 'correct' },
-        { id: 3320007, result: '小双', prediction: ['双', '小'], status: 'correct' },
-      ],
-    },
-    '算法2': {
-      accuracy: 75.50,
-      history: [
-        { id: 3320013, result: '等待结果', prediction: ['单', '小'], status: 'pending' },
-        { id: 3320012, result: '小双', prediction: ['双', '小'], status: 'wrong' },
-        { id: 3320011, result: '小双', prediction: ['双', '大'], status: 'correct' },
-        { id: 3320010, result: '小单', prediction: ['单', '大'], status: 'wrong' },
-      ],
-    },
-    '算法3': {
-      accuracy: 85.20,
-      history: [
-        { id: 3320013, result: '等待结果', prediction: ['大', '单'], status: 'pending' },
-        { id: 3320012, result: '小双', prediction: ['大', '双'], status: 'correct' },
-      ],
-    },
-    '算法4': {
-      accuracy: 68.90,
-      history: [],
-    },
-  });
+  const [activeSystem, setActiveSystem] = useState('jnd28');
+  const [selectedAlgorithm, setSelectedAlgorithm] = useState('全部');
 
-  const handleRefresh = () => {
-    setIsRefreshing(true);
-    toast({
-      title: "正在刷新...",
-      description: `正在获取 ${activeAlgorithm} 的最新数据。`,
-    });
-    setTimeout(() => {
-      setIsRefreshing(false);
-      toast({
-        title: "刷新完成！",
-        description: `数据已更新为最新状态。`,
-      });
-    }, 1500);
-  };
-  
-  const currentData = useMemo(() => data[activeAlgorithm], [data, activeAlgorithm]);
+  const { data: stats, loading: statsLoading, refetch: refetchStats } = usePredictionStats(activeSystem);
+  const { data: predictions, loading: predictionsLoading, refetch: refetchPredictions } = usePredictions(activeSystem);
+  const { data: algorithms, loading: algorithmsLoading, refetch: refetchAlgorithms } = useAlgorithmCompare(activeSystem);
 
-  const getStatusBadge = (status) => {
-    switch (status) {
-      case 'correct':
-        return <span className="px-3 py-1 text-sm font-bold text-white bg-red-500 rounded">对</span>;
-      case 'wrong':
-        return <span className="px-3 py-1 text-sm font-bold text-white bg-gray-500 rounded">错</span>;
-      case 'pending':
-      default:
-        return <span className="text-gray-500">-</span>;
-    }
+  const systemLabels = {
+    jnd28: '加拿大28',
+    ff28: '分分28',
+    bit28: '比特28',
   };
 
-  const getPredictionBadge = (type) => {
-    const isPrimary = ['大', '单'].includes(type);
-    return (
-      <span className={cn(
-        'px-2 py-0.5 text-sm font-semibold text-white rounded mx-0.5',
-        isPrimary ? 'bg-sky-500' : 'bg-orange-500'
-      )}>{type}</span>
-    );
+  const handleRefreshAll = () => {
+    refetchStats();
+    refetchPredictions();
+    refetchAlgorithms();
   };
-  
+
+  // 篩選預測記錄
+  const filteredPredictions = selectedAlgorithm === '全部' 
+    ? predictions 
+    : predictions.filter(p => p.algorithm === selectedAlgorithm);
+
   return (
     <>
       <Helmet>
-        <title>{String('算法预测 - ' + (siteSettings?.site_name ?? '大海团队'))}</title>
-        <meta name="description" content="加拿大28 - 算法预测" />
+        <title>{String('PC28预测系统 - ' + (siteSettings?.site_name ?? '大海团队'))}</title>
+        <meta name="description" content="PC28实时预测数据分析与算法对比" />
       </Helmet>
-      <div className="p-2 sm:p-4 bg-gray-100 min-h-full flex items-center justify-center">
-        <motion.div 
-          className="w-full max-w-2xl"
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.3 }}
-        >
-          <Card className="shadow-lg rounded-xl overflow-hidden border-none">
-            <header className="bg-blue-600 text-white p-4 flex items-center">
-              <BarChart className="w-6 h-6 mr-3" />
-              <h1 className="text-xl font-bold">加拿大28 - 算法预测</h1>
-            </header>
-            
-            <CardContent className="p-4 bg-gray-50">
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2 mb-4">
-                {['算法1', '算法2', '算法3', '算法4'].map(algo => (
-                  <Button
-                    key={algo}
-                    variant={activeAlgorithm === algo ? 'default' : 'secondary'}
-                    className={cn('w-full', activeAlgorithm === algo ? 'bg-blue-600 hover:bg-blue-700' : 'bg-white hover:bg-gray-200 text-gray-700')}
-                    onClick={() => setActiveAlgorithm(algo)}
-                  >
-                    {algo}
-                  </Button>
-                ))}
-              </div>
+      
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 p-4 sm:p-6">
+        <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
+          {/* 頂部標題 */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                🎯 PC28 預測系統
+              </h1>
+              <p className="text-gray-600 mt-1 text-sm sm:text-base">實時預測數據分析與算法對比</p>
+            </div>
+            <Button onClick={handleRefreshAll} variant="outline" size="sm">
+              <RefreshCw className="w-4 h-4 mr-2" />
+              刷新數據
+            </Button>
+          </div>
 
-              <div className="flex justify-between items-center mb-4 p-3 bg-white rounded-lg shadow-sm">
-                <div className="flex items-center">
-                  <Percent className="w-5 h-5 text-green-500 mr-2" />
-                  <p className="text-gray-700">
-                    准确率: <span className="font-bold text-green-600">{currentData.accuracy.toFixed(2)}%</span> (近15期)
-                  </p>
+          {/* 系統選擇標籤 */}
+          <div className="flex gap-2 sm:gap-3">
+            {['jnd28', 'ff28', 'bit28'].map((system) => (
+              <button
+                key={system}
+                onClick={() => setActiveSystem(system)}
+                className={`flex-1 py-3 sm:py-4 px-3 sm:px-6 rounded-xl font-semibold text-base sm:text-lg transition-all duration-300 ${
+                  activeSystem === system
+                    ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg scale-105'
+                    : 'bg-white text-gray-600 hover:bg-gray-50 shadow'
+                }`}
+              >
+                {system === 'jnd28' && '👑 '}
+                {system === 'ff28' && '⚡ '}
+                {system === 'bit28' && '💎 '}
+                <span className="hidden sm:inline">{systemLabels[system]}</span>
+                <span className="sm:hidden">{systemLabels[system].replace('28', '')}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* 統計卡片 */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            {statsLoading ? (
+              // 加載骨架
+              Array(4).fill(0).map((_, i) => (
+                <Card key={i} className="animate-pulse">
+                  <CardContent className="pt-6">
+                    <div className="h-4 bg-gray-200 rounded w-1/2 mb-4"></div>
+                    <div className="h-8 bg-gray-300 rounded"></div>
+                  </CardContent>
+                </Card>
+              ))
+            ) : stats ? (
+              <>
+                <Card className="border-0 shadow-lg hover:shadow-xl transition-shadow bg-white">
+                  <CardContent className="pt-4 sm:pt-6">
+                    <div className="text-xs sm:text-sm text-gray-600 mb-2">總預測數</div>
+                    <div className="text-2xl sm:text-4xl font-bold text-indigo-600">
+                      {stats.total_predictions || 0}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-0 shadow-lg hover:shadow-xl transition-shadow bg-white">
+                  <CardContent className="pt-4 sm:pt-6">
+                    <div className="text-xs sm:text-sm text-gray-600 mb-2">正確預測</div>
+                    <div className="text-2xl sm:text-4xl font-bold text-green-600">
+                      {stats.correct_predictions || 0}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-0 shadow-lg hover:shadow-xl transition-shadow bg-white">
+                  <CardContent className="pt-4 sm:pt-6">
+                    <div className="text-xs sm:text-sm text-gray-600 mb-2">錯誤預測</div>
+                    <div className="text-2xl sm:text-4xl font-bold text-red-600">
+                      {stats.wrong_predictions || 0}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-0 shadow-lg hover:shadow-xl transition-shadow bg-white">
+                  <CardContent className="pt-4 sm:pt-6">
+                    <div className="text-xs sm:text-sm text-gray-600 mb-2">準確率</div>
+                    <div className="text-2xl sm:text-4xl font-bold text-pink-600">
+                      {stats.accuracy_rate ? `${parseFloat(stats.accuracy_rate).toFixed(2)}%` : '0%'}
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            ) : null}
+          </div>
+
+          {/* 算法性能對比 */}
+          <Card className="border-0 shadow-xl bg-white">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                🎯 算法性能對比
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {algorithmsLoading ? (
+                <div className="text-center py-8 text-gray-500">加載中...</div>
+              ) : algorithms.length > 0 ? (
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                  {algorithms.slice(0, 4).map((algo, index) => {
+                    const colors = [
+                      'from-green-400 to-green-600',
+                      'from-blue-400 to-blue-600',
+                      'from-purple-400 to-purple-600',
+                      'from-pink-400 to-pink-600',
+                    ];
+                    const bgColors = [
+                      'bg-green-50 border-green-200',
+                      'bg-blue-50 border-blue-200',
+                      'bg-purple-50 border-purple-200',
+                      'bg-pink-50 border-pink-200',
+                    ];
+
+                    return (
+                      <div
+                        key={algo.algorithm_id}
+                        className={`p-3 sm:p-4 rounded-xl border-2 ${bgColors[index]} hover:shadow-lg transition-all cursor-pointer`}
+                        onClick={() => setSelectedAlgorithm(algo.algorithm)}
+                      >
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-base sm:text-lg">
+                            {index === 0 && '🥇'}
+                            {index === 1 && '🥈'}
+                            {index === 2 && '🥉'}
+                            {index === 3 && '🎖️'}
+                          </span>
+                          <div className="font-semibold text-gray-800 text-sm sm:text-base">{algo.algorithm}</div>
+                        </div>
+                        
+                        <div className={`text-2xl sm:text-3xl font-bold bg-gradient-to-r ${colors[index]} bg-clip-text text-transparent mb-2`}>
+                          {parseFloat(algo.accuracy_rate).toFixed(2)}%
+                        </div>
+                        
+                        <div className="text-xs sm:text-sm text-gray-600 space-y-1">
+                          <div>{algo.total_predictions} 次預測</div>
+                          <div className="flex gap-2 sm:gap-4">
+                            <span className="text-green-600">大小✓{algo.size_correct_count || 0}</span>
+                            <span className="text-blue-600">單雙✓{algo.parity_correct_count || 0}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing}>
-                  <RefreshCw className={cn('w-4 h-4 mr-2', isRefreshing && 'animate-spin')} />
-                  刷新数据
-                </Button>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[400px] text-sm text-center bg-white rounded-lg overflow-hidden shadow-sm">
-                  <thead className="bg-blue-500 text-white">
-                    <tr>
-                      <th className="py-3 px-2 font-semibold">期号</th>
-                      <th className="py-3 px-2 font-semibold">开奖</th>
-                      <th className="py-3 px-2 font-semibold">预测</th>
-                      <th className="py-3 px-2 font-semibold">对错</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {currentData.history.length > 0 ? (
-                      currentData.history.map((item, index) => (
-                        <motion.tr
-                          key={item.id}
-                          className="hover:bg-gray-50"
-                          initial={{ opacity: 0, y: -10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: index * 0.05 }}
-                        >
-                          <td className="py-3 px-2 text-gray-600 font-medium">{item.id}</td>
-                          <td className="py-3 px-2 text-gray-800">{item.result}</td>
-                          <td className="py-3 px-2">
-                            {item.prediction.map(p => getPredictionBadge(p))}
-                          </td>
-                          <td className="py-3 px-2">{getStatusBadge(item.status)}</td>
-                        </motion.tr>
-                      ))
-                    ) : (
-                       <tr>
-                         <td colSpan="4" className="py-8 text-gray-500">
-                           暂无历史数据
-                         </td>
-                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">暫無數據</div>
+              )}
             </CardContent>
           </Card>
-        </motion.div>
+
+          {/* 預測記錄 */}
+          <Card className="border-0 shadow-xl bg-white">
+            <CardHeader>
+              <CardTitle className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <span className="flex items-center gap-2 text-base sm:text-lg">
+                  📊 預測記錄（最近20條）
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant={selectedAlgorithm === '全部' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setSelectedAlgorithm('全部')}
+                  >
+                    全部
+                  </Button>
+                  {algorithms.slice(0, 4).map((algo) => (
+                    <Button
+                      key={algo.algorithm_id}
+                      variant={selectedAlgorithm === algo.algorithm ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setSelectedAlgorithm(algo.algorithm)}
+                      className="text-xs sm:text-sm"
+                    >
+                      {algo.algorithm}
+                    </Button>
+                  ))}
+                </div>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {predictionsLoading ? (
+                <div className="text-center py-8 text-gray-500">加載中...</div>
+              ) : filteredPredictions.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b-2 border-gray-200">
+                        <th className="text-left py-3 px-2 sm:px-4 text-gray-600 font-semibold text-xs sm:text-sm">期號</th>
+                        <th className="text-left py-3 px-2 sm:px-4 text-gray-600 font-semibold text-xs sm:text-sm">預測</th>
+                        <th className="text-left py-3 px-2 sm:px-4 text-gray-600 font-semibold text-xs sm:text-sm">實際</th>
+                        <th className="text-left py-3 px-2 sm:px-4 text-gray-600 font-semibold text-xs sm:text-sm">狀態</th>
+                        <th className="text-left py-3 px-2 sm:px-4 text-gray-600 font-semibold text-xs sm:text-sm">結果</th>
+                        <th className="text-left py-3 px-2 sm:px-4 text-gray-600 font-semibold text-xs sm:text-sm hidden sm:table-cell">算法</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredPredictions.slice(0, 20).map((pred) => (
+                        <tr key={pred.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                          <td className="py-3 px-2 sm:px-4 font-mono text-xs">{pred.issue}</td>
+                          <td className="py-3 px-2 sm:px-4">
+                            <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs">
+                              {pred.prediction}
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-2 sm:px-4">
+                            {pred.actual_result ? (
+                              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">
+                                {pred.actual_result}
+                              </Badge>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-2 sm:px-4">
+                            <Badge variant={pred.status === 'verified' ? 'default' : 'secondary'} className="text-xs">
+                              {pred.status === 'verified' ? '已驗證' : '待驗證'}
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-2 sm:px-4">
+                            {pred.result === '對' ? (
+                              <span className="text-green-600 font-semibold text-xs sm:text-sm">✓ 對</span>
+                            ) : pred.result === '錯' ? (
+                              <span className="text-red-600 font-semibold text-xs sm:text-sm">✗ 錯</span>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-2 sm:px-4 hidden sm:table-cell">
+                            <span className="text-xs text-gray-600">{pred.algorithm}</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  {selectedAlgorithm === '全部' ? '暫無預測記錄' : `暫無 ${selectedAlgorithm} 的預測記錄`}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </>
   );
-};
+}
 
 export default Prediction;
