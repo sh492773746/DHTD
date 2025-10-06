@@ -13,6 +13,7 @@ import TenantAdminLayout from '@/components/TenantAdminLayout';
 import SocialFeed from '@/pages/SocialFeed';
 import Prediction from '@/pages/Prediction';
 import PredictionGame from '@/pages/PredictionGame';
+import PredictionDashboard from '@/pages/PredictionDashboard';
 import Profile from '@/pages/Profile';
 import EditProfile from '@/pages/EditProfile';
 import PointsCenter from '@/pages/PointsCenter';
@@ -84,6 +85,10 @@ const routerConfig = [
           {
             path: 'prediction',
             element: <ProtectedRoute><Prediction /></ProtectedRoute>,
+          },
+          {
+            path: 'prediction-dashboard',
+            element: <PredictionDashboard />,
           },
           {
             path: 'games',
