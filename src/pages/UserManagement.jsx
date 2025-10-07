@@ -148,56 +148,63 @@ const UserManagement = () => {
       const data = await res.json();
       
       if (shouldDelete) {
-        const deletedCount = data.deleted_count || 0;
-        const totalOrphaned = data.orphaned_profiles || 0;
-        const errors = data.deletion_errors || [];
-        
-        if (deletedCount === totalOrphaned) {
-          toast({
-            title: "清理完成",
-            description: `✅ 已成功删除 ${deletedCount} 个孤立 profile`,
-            duration: 5000,
-          });
-        } else if (deletedCount > 0) {
-          toast({
-            variant: "destructive",
-            title: "部分清理成功",
-            description: `已删除 ${deletedCount}/${totalOrphaned} 个孤立 profile。${errors.length > 0 ? `失败原因：${errors[0].error}` : ''}`,
-            duration: 8000,
-          });
-        } else {
-          toast({
-            variant: "destructive",
-            title: "清理失败",
-            description: errors.length > 0 ? errors[0].error : '未知错误',
-            duration: 8000,
-          });
-        }
+        toast({
+          title: "清理完成",
+          description: `已删除 ${data.deleted_count} 个孤立 profile`,
+          duration: 5000,
+        });
         
         // 刷新用户列表
-        fetchUsers();
+        await fetchUsers();
+        setCleanupLoading(false);
       } else {
         const orphanedCount = data.orphaned_profiles || 0;
         
         if (orphanedCount > 0) {
+          setCleanupLoading(false); // 先关闭加载状态，以便显示确认对话框
+          
           const confirmDelete = window.confirm(
-            `发现 ${orphanedCount} 个孤立 profile（在 Supabase 中已删除但 Turso 仍有数据）。\n\n` +
+            `发现 ${orphanedCount} 个孤立 profile（在 Supabase 中已删除但 Turso 仍有数据）：\n\n` +
+            `${data.orphaned_list?.slice(0, 5).map(u => `• ${u.username || 'Unknown'} (${u.id.slice(0, 8)}...)`).join('\n')}` +
+            `${orphanedCount > 5 ? `\n...还有 ${orphanedCount - 5} 个` : ''}\n\n` +
             `这些数据可能是在 Supabase 删除用户后残留的。\n\n` +
             `是否删除这些孤立数据？`
           );
           
           if (confirmDelete) {
-            handleCleanupOrphaned(true);
-            return;
+            // 重新开启加载状态并执行删除
+            setCleanupLoading(true);
+            
+            const deleteRes = await fetch('/api/admin/users/cleanup-orphaned?delete=true', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${session?.access_token || ''}`,
+              },
+            });
+            
+            if (!deleteRes.ok) {
+              throw new Error('删除失败');
+            }
+            
+            const deleteData = await deleteRes.json();
+            
+            toast({
+              title: "清理完成",
+              description: `已成功删除 ${deleteData.deleted_count} 个孤立 profile`,
+              duration: 5000,
+            });
+            
+            // 刷新用户列表
+            await fetchUsers();
           }
+        } else {
+          toast({
+            title: "检查完成",
+            description: '未发现孤立 profile，数据库状态良好 ✅',
+            duration: 4000,
+          });
         }
-        
-        toast({
-          title: "检查完成",
-          description: orphanedCount > 0 
-            ? `发现 ${orphanedCount} 个孤立 profile`
-            : '未发现孤立 profile',
-        });
+        setCleanupLoading(false);
       }
     } catch (error) {
       toast({
@@ -205,7 +212,6 @@ const UserManagement = () => {
         title: '清理失败',
         description: error.message,
       });
-    } finally {
       setCleanupLoading(false);
     }
   };

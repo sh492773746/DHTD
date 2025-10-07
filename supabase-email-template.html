@@ -1,0 +1,207 @@
+<!-- 
+  Supabase 邮箱确认模板 (Confirm signup - Message body)
+  
+  使用方法:
+  1. 登录 Supabase Dashboard
+  2. Authentication → Email Templates
+  3. 选择 "Confirm signup"
+  4. 将下面的 HTML 复制到 "Message body" 中
+  5. 点击 Save
+  6. 测试后可以删除此文件
+  
+  注意: {{ .ConfirmationURL }} 等变量会被 Supabase 自动替换
+-->
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>验证您的邮箱</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background-color: #f5f5f5;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background-color: #ffffff;
+    }
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 40px 20px;
+      text-align: center;
+    }
+    .logo {
+      font-size: 32px;
+      font-weight: bold;
+      color: #ffffff;
+      margin: 0;
+    }
+    .content {
+      padding: 40px 30px;
+    }
+    .title {
+      font-size: 24px;
+      font-weight: 600;
+      color: #1a202c;
+      margin: 0 0 20px 0;
+    }
+    .message {
+      font-size: 16px;
+      color: #4a5568;
+      margin: 0 0 30px 0;
+    }
+    .button-container {
+      text-align: center;
+      margin: 40px 0;
+    }
+    .button {
+      display: inline-block;
+      padding: 16px 40px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #ffffff !important;
+      text-decoration: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      box-shadow: 0 4px 6px rgba(102, 126, 234, 0.3);
+      transition: all 0.3s ease;
+    }
+    .button:hover {
+      box-shadow: 0 6px 8px rgba(102, 126, 234, 0.4);
+      transform: translateY(-2px);
+    }
+    .info-box {
+      background-color: #edf2f7;
+      border-left: 4px solid #4299e1;
+      padding: 16px 20px;
+      margin: 30px 0;
+      border-radius: 4px;
+    }
+    .info-box p {
+      margin: 0;
+      font-size: 14px;
+      color: #2d3748;
+    }
+    .link-text {
+      font-size: 12px;
+      color: #718096;
+      word-break: break-all;
+      margin: 20px 0;
+    }
+    .footer {
+      background-color: #f7fafc;
+      padding: 30px;
+      text-align: center;
+      border-top: 1px solid #e2e8f0;
+    }
+    .footer p {
+      margin: 5px 0;
+      font-size: 14px;
+      color: #718096;
+    }
+    .footer a {
+      color: #4299e1;
+      text-decoration: none;
+    }
+    .divider {
+      height: 1px;
+      background-color: #e2e8f0;
+      margin: 30px 0;
+    }
+    @media only screen and (max-width: 600px) {
+      .content {
+        padding: 30px 20px;
+      }
+      .title {
+        font-size: 20px;
+      }
+      .message {
+        font-size: 14px;
+      }
+      .button {
+        padding: 14px 30px;
+        font-size: 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1 class="logo">🎉 欢迎加入</h1>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+      <h2 class="title">验证您的邮箱地址</h2>
+      
+      <p class="message">
+        您好！感谢您注册我们的平台。为了确保您的账号安全并开始使用所有功能，我们需要验证您的邮箱地址。
+      </p>
+
+      <div class="info-box">
+        <p><strong>📧 邮箱：</strong>{{ .Email }}</p>
+      </div>
+
+      <p class="message">
+        请点击下方按钮完成验证。此链接将在 <strong>24 小时</strong>后失效。
+      </p>
+
+      <!-- Verification Button -->
+      <div class="button-container">
+        <a href="{{ .ConfirmationURL }}" class="button">
+          ✓ 验证邮箱
+        </a>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Alternative Link -->
+      <p class="message" style="font-size: 14px;">
+        如果按钮无法点击，请复制下面的链接到浏览器地址栏：
+      </p>
+      <p class="link-text">
+        {{ .ConfirmationURL }}
+      </p>
+
+      <div class="divider"></div>
+
+      <!-- Security Notice -->
+      <div class="info-box" style="border-left-color: #f6ad55; background-color: #fffaf0;">
+        <p>
+          <strong>🔒 安全提示：</strong>如果您没有注册此账号，请忽略此邮件。您的邮箱地址将不会被注册。
+        </p>
+      </div>
+
+      <p class="message" style="font-size: 14px; margin-top: 30px;">
+        验证成功后，您将能够：
+      </p>
+      <ul style="color: #4a5568; font-size: 14px; padding-left: 20px;">
+        <li>登录您的账号</li>
+        <li>访问所有平台功能</li>
+        <li>获得完整的用户体验</li>
+      </ul>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <p><strong>需要帮助？</strong></p>
+      <p>如有任何问题，请联系我们的客服团队</p>
+      <p style="margin-top: 20px; font-size: 12px; color: #a0aec0;">
+        本邮件由系统自动发送，请勿直接回复
+      </p>
+      <p style="font-size: 12px; color: #a0aec0;">
+        © {{ .SiteURL }} - 保留所有权利
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+
