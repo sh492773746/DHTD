@@ -148,10 +148,31 @@ const UserManagement = () => {
       const data = await res.json();
       
       if (shouldDelete) {
-        toast({
-          title: "清理完成",
-          description: `已删除 ${data.deleted_count} 个孤立 profile`,
-        });
+        const deletedCount = data.deleted_count || 0;
+        const totalOrphaned = data.orphaned_profiles || 0;
+        const errors = data.deletion_errors || [];
+        
+        if (deletedCount === totalOrphaned) {
+          toast({
+            title: "清理完成",
+            description: `✅ 已成功删除 ${deletedCount} 个孤立 profile`,
+            duration: 5000,
+          });
+        } else if (deletedCount > 0) {
+          toast({
+            variant: "destructive",
+            title: "部分清理成功",
+            description: `已删除 ${deletedCount}/${totalOrphaned} 个孤立 profile。${errors.length > 0 ? `失败原因：${errors[0].error}` : ''}`,
+            duration: 8000,
+          });
+        } else {
+          toast({
+            variant: "destructive",
+            title: "清理失败",
+            description: errors.length > 0 ? errors[0].error : '未知错误',
+            duration: 8000,
+          });
+        }
         
         // 刷新用户列表
         fetchUsers();

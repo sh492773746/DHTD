@@ -2402,31 +2402,61 @@ app.post('/api/admin/users/cleanup-orphaned', async (c) => {
     const shouldDelete = c.req.query('delete') === 'true';
     let deletedCount = 0;
     
+    const deletionErrors = [];
+    
     if (shouldDelete && orphanedProfiles.length > 0) {
+      console.log(`Starting deletion of ${orphanedProfiles.length} orphaned profiles...`);
+      
       for (const orphan of orphanedProfiles) {
         try {
+          console.log(`Deleting orphaned profile: ${orphan.id} (${orphan.username})`);
+          
           // Delete invitations
-          await gdb.delete(invitations).where(eq(invitations.inviterId, orphan.id));
-          await gdb.delete(invitations).where(eq(invitations.inviteeId, orphan.id));
+          try {
+            await gdb.delete(invitations).where(eq(invitations.inviterId, orphan.id));
+            await gdb.delete(invitations).where(eq(invitations.inviteeId, orphan.id));
+          } catch (e) {
+            console.error(`Failed to delete invitations for ${orphan.id}:`, e.message);
+          }
           
           // Delete comments
-          await gdb.delete(commentsTable).where(eq(commentsTable.userId, orphan.id));
+          try {
+            await gdb.delete(commentsTable).where(eq(commentsTable.userId, orphan.id));
+          } catch (e) {
+            console.error(`Failed to delete comments for ${orphan.id}:`, e.message);
+          }
           
           // Delete posts
-          await gdb.delete(postsTable).where(eq(postsTable.userId, orphan.id));
+          try {
+            await gdb.delete(postsTable).where(eq(postsTable.userId, orphan.id));
+          } catch (e) {
+            console.error(`Failed to delete posts for ${orphan.id}:`, e.message);
+          }
           
           // Delete admin roles
-          await gdb.delete(adminUsersTable).where(eq(adminUsersTable.userId, orphan.id));
-          await gdb.delete(tenantAdminsTable).where(eq(tenantAdminsTable.userId, orphan.id));
+          try {
+            await gdb.delete(adminUsersTable).where(eq(adminUsersTable.userId, orphan.id));
+            await gdb.delete(tenantAdminsTable).where(eq(tenantAdminsTable.userId, orphan.id));
+          } catch (e) {
+            console.error(`Failed to delete admin roles for ${orphan.id}:`, e.message);
+          }
           
-          // Delete profile
+          // Delete profile (most important)
           await gdb.delete(profiles).where(eq(profiles.id, orphan.id));
           
           deletedCount++;
+          console.log(`Successfully deleted orphaned profile: ${orphan.id}`);
         } catch (e) {
           console.error(`Failed to delete orphaned profile ${orphan.id}:`, e);
+          deletionErrors.push({
+            id: orphan.id,
+            username: orphan.username,
+            error: e.message,
+          });
         }
       }
+      
+      console.log(`Deletion completed: ${deletedCount}/${orphanedProfiles.length} profiles deleted`);
     }
     
     return c.json({
@@ -2436,6 +2466,7 @@ app.post('/api/admin/users/cleanup-orphaned', async (c) => {
       orphaned_profiles: orphanedProfiles.length,
       orphaned_list: orphanedProfiles,
       deleted_count: deletedCount,
+      deletion_errors: deletionErrors,
       action_taken: shouldDelete ? 'deleted' : 'none (use ?delete=true to remove)',
     });
     

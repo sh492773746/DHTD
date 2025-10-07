@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>验证您的邮箱</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+            line-height: 1.6;
+            background-color: #f4f4f7;
+        }
+        .email-wrapper {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+        }
+        .email-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 40px 20px;
+            text-align: center;
+        }
+        .email-logo {
+            font-size: 32px;
+            font-weight: bold;
+            color: #ffffff;
+            margin: 0;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .email-body {
+            padding: 40px 30px;
+            color: #333333;
+        }
+        .greeting {
+            font-size: 24px;
+            font-weight: 600;
+            color: #1a202c;
+            margin-bottom: 20px;
+        }
+        .message {
+            font-size: 16px;
+            color: #4a5568;
+            margin-bottom: 30px;
+            line-height: 1.8;
+        }
+        .cta-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #ffffff !important;
+            padding: 16px 40px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            transition: all 0.3s ease;
+        }
+        .cta-button:hover {
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+            transform: translateY(-2px);
+        }
+        .button-wrapper {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .alternative-link {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #f7fafc;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        .alternative-link p {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            color: #4a5568;
+        }
+        .alternative-link a {
+            color: #667eea;
+            word-break: break-all;
+            font-size: 13px;
+        }
+        .security-notice {
+            margin-top: 30px;
+            padding: 15px;
+            background-color: #fff5f5;
+            border-radius: 8px;
+            border-left: 4px solid #f56565;
+        }
+        .security-notice p {
+            margin: 0;
+            font-size: 14px;
+            color: #742a2a;
+        }
+        .email-footer {
+            background-color: #f7fafc;
+            padding: 30px 20px;
+            text-align: center;
+            color: #718096;
+            font-size: 14px;
+            border-top: 1px solid #e2e8f0;
+        }
+        .footer-links {
+            margin: 15px 0;
+        }
+        .footer-links a {
+            color: #667eea;
+            text-decoration: none;
+            margin: 0 10px;
+        }
+        .footer-links a:hover {
+            text-decoration: underline;
+        }
+        .social-links {
+            margin: 20px 0;
+        }
+        .social-links a {
+            display: inline-block;
+            margin: 0 8px;
+            color: #718096;
+            text-decoration: none;
+        }
+        @media only screen and (max-width: 600px) {
+            .email-body {
+                padding: 30px 20px;
+            }
+            .greeting {
+                font-size: 20px;
+            }
+            .message {
+                font-size: 15px;
+            }
+            .cta-button {
+                padding: 14px 30px;
+                font-size: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="email-wrapper">
+        <!-- Header -->
+        <div class="email-header">
+            <h1 class="email-logo">🎉 欢迎加入</h1>
+        </div>
+
+        <!-- Body -->
+        <div class="email-body">
+            <div class="greeting">
+                您好！👋
+            </div>
+
+            <div class="message">
+                <p>感谢您注册我们的平台！我们很高兴您能加入我们的社区。</p>
+                <p>为了确保您的账户安全，请点击下面的按钮验证您的邮箱地址：</p>
+            </div>
+
+            <div class="button-wrapper">
+                <a href="{{ .ConfirmationURL }}" class="cta-button">
+                    ✉️ 验证我的邮箱
+                </a>
+            </div>
+
+            <div class="alternative-link">
+                <p><strong>按钮无法点击？</strong></p>
+                <p>请复制以下链接到浏览器中打开：</p>
+                <a href="{{ .ConfirmationURL }}">{{ .ConfirmationURL }}</a>
+            </div>
+
+            <div class="message" style="margin-top: 30px;">
+                <p>验证链接将在 <strong>24 小时后失效</strong>，请尽快完成验证。</p>
+                <p>验证成功后，您就可以：</p>
+                <ul style="margin: 10px 0; padding-left: 20px; color: #4a5568;">
+                    <li>完整使用所有功能</li>
+                    <li>发布内容和参与讨论</li>
+                    <li>获取积分奖励</li>
+                    <li>享受会员专属权益</li>
+                </ul>
+            </div>
+
+            <div class="security-notice">
+                <p><strong>⚠️ 安全提示：</strong> 如果您没有注册过我们的平台，请忽略此邮件。您的账户信息是安全的，无需采取任何行动。</p>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="email-footer">
+            <p>此邮件由系统自动发送，请勿直接回复。</p>
+            <div class="footer-links">
+                <a href="{{ .SiteURL }}">访问网站</a> •
+                <a href="{{ .SiteURL }}/help">帮助中心</a> •
+                <a href="{{ .SiteURL }}/contact">联系我们</a>
+            </div>
+            <p style="margin-top: 20px; font-size: 12px; color: #a0aec0;">
+                © {{ .SiteURL }} 版权所有<br>
+                您收到此邮件是因为您在我们的网站注册了账号
+            </p>
+        </div>
+    </div>
+</body>
+</html>
+
