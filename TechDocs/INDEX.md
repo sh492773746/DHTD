@@ -39,6 +39,11 @@
   - 错误处理
 
 ### 🎮 功能模块
+- [LANDING_PAGE_GUIDE.md](./LANDING_PAGE_GUIDE.md) - **Landing Page 配置指南** 🆕
+  - 完整配置教程
+  - 常见问题解答
+  - 调试指南
+
 - [PREDICTION_DASHBOARD_GUIDE.md](./PREDICTION_DASHBOARD_GUIDE.md) - 预测仪表板指南
   - 预测算法
   - 数据展示
@@ -96,6 +101,7 @@
 | REACT_GUIDE.md | - | ✅ 完整 | - |
 | SECURITY_AND_OPTIMIZATION_REPORT.md | - | ✅ 完整 | - |
 | PERFORMANCE_OPTIMIZATION_GUIDE.md | - | ✅ 完整 | - |
+| LANDING_PAGE_GUIDE.md | v1.0.0 | ✅ 最新 | 2025-10-07 |
 | PREDICTION_DASHBOARD_GUIDE.md | - | ✅ 完整 | - |
 | POINTS_SYNC_FIX.md | - | ✅ 完整 | - |
 | RATE_LIMITING_AUDIT_ERROR_UPGRADE_GUIDE.md | - | ✅ 完整 | - |
@@ -116,6 +122,11 @@
 ### 🔧 需要修复 Bug？
 1. 检查相关功能模块文档
 2. 查看 [POINTS_SYNC_FIX.md](./POINTS_SYNC_FIX.md) 了解问题排查流程
+
+### 🎨 配置 Landing Page？
+1. 阅读 [LANDING_PAGE_GUIDE.md](./LANDING_PAGE_GUIDE.md) 配置指南
+2. 按步骤在后台创建内容项
+3. 查看常见问题解答
 
 ### 🔒 安全相关？
 1. 阅读 [SECURITY_AND_OPTIMIZATION_REPORT.md](./SECURITY_AND_OPTIMIZATION_REPORT.md)
@@ -220,9 +231,9 @@ ls TechDocs/ | grep PERFORMANCE
 
 ## 📊 文档统计
 
-- **总文档数**: 9 个
+- **总文档数**: 10 个 📈
 - **性能优化**: 2 个
-- **功能指南**: 3 个
+- **功能指南**: 4 个 🆕
 - **安全相关**: 2 个
 - **开发规范**: 1 个
 - **项目文档**: 1 个
