@@ -55,6 +55,8 @@ const InteractiveCarousel = ({ tenantId }) => {
 
   const overlayBgColor = `rgba(0, 0, 0, ${Math.min(1, Math.max(0, overlayOpacity / 100))})`;
 
+  // 性能优化：首屏图片优先加载
+  const isFirstSlide = imageIndex === 0;
 
   return (
     <motion.div
@@ -77,12 +79,16 @@ const InteractiveCarousel = ({ tenantId }) => {
               opacity: { duration: 0.2 },
             }}
             className="absolute w-full h-full"
+            style={{ willChange: 'transform, opacity' }}
           >
             <img 
-              alt={currentSlide?.title}
+              alt={currentSlide?.title || '轮播图'}
               className="w-full h-full object-cover"
               src={currentSlide?.image_url}
-              loading="lazy" decoding="async" />
+              loading={isFirstSlide ? 'eager' : 'lazy'}
+              decoding={isFirstSlide ? 'sync' : 'async'}
+              fetchpriority={isFirstSlide ? 'high' : 'auto'}
+            />
           </motion.div>
         </AnimatePresence>
       </div>

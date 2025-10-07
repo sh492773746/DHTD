@@ -236,6 +236,16 @@ export default defineConfig({
 		},
 	},
 	build: {
+		// 性能优化：启用压缩和代码分割
+		minify: 'terser',
+		terserOptions: {
+			compress: {
+				drop_console: true, // 生产环境移除 console
+				drop_debugger: true,
+			},
+		},
+		// 优化 chunk 大小
+		chunkSizeWarningLimit: 1000,
 		rollupOptions: {
 			external: [
 				'@babel/parser',
@@ -243,8 +253,28 @@ export default defineConfig({
 				'@babel/generator',
 				'@babel/types'
 			],
-			output: {},
+			output: {
+				// 代码分割策略
+				manualChunks: {
+					// 将 React 相关库分离
+					'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+					// 将 UI 组件库分离
+					'ui-vendor': ['framer-motion', 'lucide-react'],
+					// 将大型库分离
+					'chart-vendor': ['recharts'],
+					// 将查询和状态管理分离
+					'data-vendor': ['@tanstack/react-query', '@supabase/supabase-js'],
+				},
+				// 优化输出文件名
+				chunkFileNames: 'assets/js/[name]-[hash].js',
+				entryFileNames: 'assets/js/[name]-[hash].js',
+				assetFileNames: 'assets/[ext]/[name]-[hash].[ext]',
+			},
 		},
+		// 启用 CSS 代码分割
+		cssCodeSplit: true,
+		// 启用源码映射（仅开发环境）
+		sourcemap: isDev,
 	},
 	define: {
 		// 🔒 安全：只注入公開的環境變量到前端

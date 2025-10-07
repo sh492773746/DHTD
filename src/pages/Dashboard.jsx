@@ -133,7 +133,11 @@ const Dashboard = () => {
               <h2 className="text-2xl font-bold mb-4 text-center text-foreground">热门推荐</h2>
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 md:gap-4">
                 {hotGames.map((game, index) => (
-                  <GameCard key={game.id || index} game={game} />
+                  <GameCard 
+                    key={game.id || index} 
+                    game={game} 
+                    priority={index < 6}
+                  />
                 ))}
               </div>
             </section>

@@ -19,7 +19,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { decryptUrl } from '@/lib/urlEncryption';
 
-const GameCard = ({ game }) => {
+const GameCard = ({ game, priority = false }) => {
   const [isAlertOpen, setIsAlertOpen] = useState(false);
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const longPressTimeoutRef = useRef(null);
@@ -98,7 +98,13 @@ const GameCard = ({ game }) => {
           )}
           <div className="w-12 h-12 sm:w-10 sm:h-10 rounded-md flex items-center justify-center mt-0.5 mb-0.5 overflow-hidden bg-secondary">
              {game.iconUrl ? (
-                <img src={game.iconUrl} alt={game.title} className="w-full h-full object-contain bg-transparent" />
+                <img 
+                  src={game.iconUrl} 
+                  alt={game.title} 
+                  className="w-full h-full object-contain bg-transparent"
+                  loading={priority ? 'eager' : 'lazy'}
+                  decoding="async"
+                />
               ) : (
                 <Gamepad2 className="w-6 h-6 text-foreground" />
               )}
