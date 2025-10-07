@@ -22,10 +22,11 @@
 
 ### 🎮 功能文档
 7. **[Landing Page 配置指南](./LANDING_PAGE_GUIDE.md)** - 发布页配置教程
-8. **[用户注册问题排查](./USER_REGISTRATION_TROUBLESHOOTING.md)** - 邮箱验证、数据同步 🆕
-9. **[预测仪表板指南](./PREDICTION_DASHBOARD_GUIDE.md)** - 预测功能
-10. **[积分同步修复](./POINTS_SYNC_FIX.md)** - 积分系统问题排查
-11. **[速率限制升级](./RATE_LIMITING_AUDIT_ERROR_UPGRADE_GUIDE.md)** - API 限流
+8. **[用户注册问题排查](./USER_REGISTRATION_TROUBLESHOOTING.md)** - 邮箱验证、数据同步
+9. **[用户数据存储架构](./USER_DATA_STORAGE.md)** - 数据存储位置和结构 🆕
+10. **[预测仪表板指南](./PREDICTION_DASHBOARD_GUIDE.md)** - 预测功能
+11. **[积分同步修复](./POINTS_SYNC_FIX.md)** - 积分系统问题排查
+12. **[速率限制升级](./RATE_LIMITING_AUDIT_ERROR_UPGRADE_GUIDE.md)** - API 限流
 
 ---
 
@@ -33,7 +34,8 @@
 
 - 🆕 **刚加入项目？** → [PROJECT_DOCUMENTATION.md](./PROJECT_DOCUMENTATION.md)
 - 🎨 **配置 Landing Page？** → [LANDING_PAGE_GUIDE.md](./LANDING_PAGE_GUIDE.md)
-- 📧 **用户注册问题？** → [USER_REGISTRATION_TROUBLESHOOTING.md](./USER_REGISTRATION_TROUBLESHOOTING.md) 🆕
+- 📧 **用户注册问题？** → [USER_REGISTRATION_TROUBLESHOOTING.md](./USER_REGISTRATION_TROUBLESHOOTING.md)
+- 💾 **用户数据在哪？** → [USER_DATA_STORAGE.md](./USER_DATA_STORAGE.md) 🆕
 - 🐛 **性能问题？** → [PERFORMANCE_OPTIMIZATION.md](./PERFORMANCE_OPTIMIZATION.md)
 - 📦 **依赖问题？** → [DEPENDENCIES_CHECK.md](./DEPENDENCIES_CHECK.md)
 - ⚛️ **前端开发？** → [REACT_GUIDE.md](./REACT_GUIDE.md)
