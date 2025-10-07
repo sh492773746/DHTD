@@ -55,7 +55,19 @@ const BatchImportDialog = ({ open, onOpenChange, onImport, page, section }) => {
 
     const templateObject = {};
     sectionConfig.fields.forEach(field => {
-      templateObject[field.id] = `示例${field.label}`;
+      // 根据字段类型生成合适的示例值
+      if (field.type === 'boolean') {
+        templateObject[field.id] = false;
+      } else if (field.type === 'number') {
+        templateObject[field.id] = 0;
+      } else if (field.type === 'select') {
+        // select 类型（如 category_slug）留空，由用户手动填写有效值
+        templateObject[field.id] = '';
+      } else if (field.type === 'image') {
+        templateObject[field.id] = 'https://example.com/image.jpg';
+      } else {
+        templateObject[field.id] = `示例${field.label}`;
+      }
     });
 
     const template = JSON.stringify([templateObject], null, 2);

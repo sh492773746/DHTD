@@ -144,16 +144,28 @@ const ContentSection = ({
             return sectionContent;
         }
 
+        // 获取所有有效的分类值（从 categoryOptions 中）
+        const validCategorySlugs = (categoryOptions || []).map(cat => cat.value);
+
         if (filterCategory === 'uncategorized') {
             return sectionContent.filter(item => {
                 const categorySlug = item.content?.category_slug;
-                // 未归类：没有 category_slug 或者是空字符串
-                return !categorySlug || categorySlug.trim() === '';
+                
+                // 未归类的条件：
+                // 1. category_slug 不存在（undefined、null）
+                // 2. category_slug 是空字符串或只有空格
+                // 3. category_slug 不在有效分类列表中
+                if (!categorySlug || categorySlug.trim() === '') {
+                    return true;
+                }
+                
+                // 检查是否是有效的分类值
+                return !validCategorySlugs.includes(categorySlug);
             });
         }
 
         return sectionContent.filter(item => item.content?.category_slug === filterCategory);
-    }, [sectionContent, filterCategory, enableCategoryFilter]);
+    }, [sectionContent, filterCategory, enableCategoryFilter, categoryOptions]);
 
     const itemCount = Array.isArray(filteredContent) ? filteredContent.length : 0;
     const totalItemCount = Array.isArray(sectionContent) ? sectionContent.length : 0;
@@ -164,6 +176,9 @@ const ContentSection = ({
             return {};
         }
 
+        // 获取所有有效的分类值
+        const validCategorySlugs = (categoryOptions || []).map(cat => cat.value);
+
         const stats = {
             all: sectionContent.length,
             uncategorized: 0,
@@ -171,16 +186,20 @@ const ContentSection = ({
 
         sectionContent.forEach(item => {
             const catSlug = item.content?.category_slug;
-            // 未归类：没有 category_slug 或者是空字符串
-            if (!catSlug || catSlug.trim() === '') {
+            
+            // 未归类的条件：
+            // 1. category_slug 不存在或是空字符串
+            // 2. category_slug 不在有效分类列表中
+            if (!catSlug || catSlug.trim() === '' || !validCategorySlugs.includes(catSlug)) {
                 stats.uncategorized++;
             } else {
+                // 只统计有效的分类
                 stats[catSlug] = (stats[catSlug] || 0) + 1;
             }
         });
 
         return stats;
-    }, [sectionContent, enableCategoryFilter]);
+    }, [sectionContent, enableCategoryFilter, categoryOptions]);
 
     const handleImportClick = () => {
         setIsImporting(true);
