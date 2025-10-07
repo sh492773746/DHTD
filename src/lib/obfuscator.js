@@ -1,3 +1,138 @@
+// ==================== 游戏链接加密/解密 ====================
+
+const SECRET_KEY = 'HORIZONS_GAME_PROTECT_2024'; // 加密密钥
+
+/**
+ * 简单的 Base64 编码（防止直接看到URL）
+ */
+function simpleEncode(str) {
+  try {
+    return btoa(encodeURIComponent(str));
+  } catch (e) {
+    console.error('Encode error:', e);
+    return str;
+  }
+}
+
+/**
+ * 简单的 Base64 解码
+ */
+function simpleDecode(str) {
+  try {
+    return decodeURIComponent(atob(str));
+  } catch (e) {
+    console.error('Decode error:', e);
+    return null;
+  }
+}
+
+/**
+ * 生成时间戳令牌（防止长期有效）
+ */
+function generateTimeToken() {
+  const now = Date.now();
+  const hour = Math.floor(now / (1000 * 60 * 60)); // 每小时变化一次
+  return hour.toString(36);
+}
+
+/**
+ * 验证时间戳令牌（允许前后1小时的误差）
+ */
+function verifyTimeToken(token) {
+  const now = Date.now();
+  const currentHour = Math.floor(now / (1000 * 60 * 60));
+  
+  for (let offset = -1; offset <= 1; offset++) {
+    const validHour = currentHour + offset;
+    if (validHour.toString(36) === token) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * 简单的字符串哈希（用于签名）
+ */
+function simpleHash(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return Math.abs(hash).toString(36);
+}
+
+/**
+ * 加密游戏URL
+ * @param {string} gameUrl - 原始游戏URL
+ * @param {string} gameId - 游戏ID（可选，用于额外验证）
+ * @returns {string} - 加密后的token
+ */
+export function encryptGameUrl(gameUrl, gameId = '') {
+  const timeToken = generateTimeToken();
+  const payload = JSON.stringify({
+    url: gameUrl,
+    gid: gameId,
+    t: timeToken
+  });
+  
+  const encoded = simpleEncode(payload);
+  const signature = simpleHash(SECRET_KEY + encoded + timeToken);
+  
+  // 格式：编码数据.签名
+  return `${encoded}.${signature}`;
+}
+
+/**
+ * 解密游戏URL
+ * @param {string} token - 加密的token
+ * @returns {object|null} - 解密后的数据 {url, gameId} 或 null
+ */
+export function decryptGameUrl(token) {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 2) {
+      console.error('Invalid token format');
+      return null;
+    }
+    
+    const [encoded, signature] = parts;
+    const payload = simpleDecode(encoded);
+    
+    if (!payload) {
+      console.error('Failed to decode payload');
+      return null;
+    }
+    
+    const data = JSON.parse(payload);
+    
+    // 验证时间令牌
+    if (!verifyTimeToken(data.t)) {
+      console.error('Token expired');
+      return null;
+    }
+    
+    // 验证签名
+    const expectedSignature = simpleHash(SECRET_KEY + encoded + data.t);
+    if (signature !== expectedSignature) {
+      console.error('Invalid signature');
+      return null;
+    }
+    
+    return {
+      url: data.url,
+      gameId: data.gid
+    };
+  } catch (e) {
+    console.error('Decrypt error:', e);
+    return null;
+  }
+}
+
+// ==================== 文本混淆（原有功能）====================
+
 const beautyWords = [
   '水疗', '嫩肤', '焕颜', '紧致', '保湿', '精华', '面膜', '按摩', '护理', 
   '美容', '抗衰', '排毒', '修复', '亮白', '滋养', '活肤', '舒缓', '净化',

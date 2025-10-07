@@ -23,6 +23,7 @@ import PointsHistory from '@/pages/PointsHistory';
 import Notifications from '@/pages/Notifications';
 import Dashboard from '@/pages/Dashboard';
 import GameCenter from '@/pages/GameCenter';
+import GamePlayer from '@/pages/GamePlayer';
 // import PointsMall from '@/pages/PointsMall';
 
 // Auth Pages
@@ -103,6 +104,10 @@ const routerConfig = [
           {
             path: 'games',
             element: <GameCenter />,
+          },
+          {
+            path: 'game-player',
+            element: <GamePlayer />,
           },
           {
             path: 'games/prediction-28',

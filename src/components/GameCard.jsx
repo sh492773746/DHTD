@@ -17,6 +17,7 @@ import { Gamepad2, Info, Download, Crown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/components/ui/use-toast';
 import { Badge } from '@/components/ui/badge';
+import { encryptGameUrl } from '@/lib/obfuscator';
 
 const GameCard = ({ game }) => {
   const [isAlertOpen, setIsAlertOpen] = useState(false);
@@ -29,10 +30,17 @@ const GameCard = ({ game }) => {
 
   const handleNavigate = (path, requiresAuth) => {
     if (!path) return;
+    
+    // 🔐 安全处理：外部链接通过加密的游戏播放器打开
     if (isExternal(path)) {
-      window.open(path, '_blank', 'noopener,noreferrer');
+      const gameId = game.id || game.title || '';
+      const encryptedToken = encryptGameUrl(path, String(gameId));
+      const playerUrl = `/game-player?t=${encodeURIComponent(encryptedToken)}`;
+      navigate(playerUrl);
       return;
     }
+    
+    // 内部路径处理
     if (requiresAuth) {
       toast({
         title: "请先登录",
