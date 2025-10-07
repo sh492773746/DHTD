@@ -13,7 +13,6 @@ const GamePlayer = () => {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('t');
   
-  const [gameData, setGameData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -36,9 +35,17 @@ const GamePlayer = () => {
       return;
     }
 
-    setGameData(decrypted);
+    // 🔐 使用后端代理完全隐藏真实URL
+    // iframe只能看到后端代理地址，无法获取真实游戏URL
     setLoading(false);
   }, [token]);
+
+  // 获取代理URL（通过后端转发，隐藏真实URL）
+  const getProxyUrl = () => {
+    if (!token) return '';
+    // iframe的src指向后端代理，传递加密token
+    return `/api/game-proxy?t=${encodeURIComponent(token)}`;
+  };
 
   const handleFullscreen = () => {
     if (!containerRef.current) return;
@@ -151,11 +158,11 @@ const GamePlayer = () => {
           </div>
         </div>
 
-        {/* iframe 游戏容器 */}
+        {/* iframe 游戏容器 - 使用后端代理隐藏真实URL */}
         <div className={`flex-1 ${isFullscreen ? 'pt-12' : ''}`}>
           <iframe
             ref={iframeRef}
-            src={gameData.url}
+            src={getProxyUrl()}
             className="w-full h-full border-0"
             title="游戏"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"

@@ -628,6 +628,282 @@ app.get('/api/prediction-proxy/*', async (c) => {
   }
 });
 
+// 🎮 游戏代理 - 隐藏真实游戏URL
+app.get('/api/game-proxy', async (c) => {
+  try {
+    const token = c.req.query('t');
+    
+    if (!token) {
+      return c.html(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>加载失败</title>
+          <style>
+            body { margin: 0; padding: 20px; font-family: system-ui; background: #000; color: #fff; display: flex; align-items: center; justify-content: center; height: 100vh; }
+            .error { text-align: center; }
+          </style>
+        </head>
+        <body>
+          <div class="error">
+            <h1>🔒</h1>
+            <p>缺少游戏令牌</p>
+          </div>
+        </body>
+        </html>
+      `);
+    }
+    
+    // 解密游戏URL（使用与前端相同的算法）
+    const SECRET_KEY = 'HORIZONS_GAME_PROTECT_2024';
+    
+    // 简单的解密函数（与前端保持一致）
+    function simpleDecode(str) {
+      try {
+        return decodeURIComponent(Buffer.from(str, 'base64').toString());
+      } catch (e) {
+        console.error('Decode error:', e);
+        return null;
+      }
+    }
+    
+    function simpleHash(str) {
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash;
+      }
+      return Math.abs(hash).toString(36);
+    }
+    
+    function verifyTimeToken(tokenTime) {
+      const now = Date.now();
+      const currentHour = Math.floor(now / (1000 * 60 * 60));
+      
+      for (let offset = -1; offset <= 1; offset++) {
+        const validHour = currentHour + offset;
+        if (validHour.toString(36) === tokenTime) {
+          return true;
+        }
+      }
+      return false;
+    }
+    
+    // 解密token
+    const parts = token.split('.');
+    if (parts.length !== 2) {
+      return c.html(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>加载失败</title>
+          <style>
+            body { margin: 0; padding: 20px; font-family: system-ui; background: #000; color: #fff; display: flex; align-items: center; justify-content: center; height: 100vh; }
+            .error { text-align: center; }
+          </style>
+        </head>
+        <body>
+          <div class="error">
+            <h1>⚠️</h1>
+            <p>无效的令牌格式</p>
+          </div>
+        </body>
+        </html>
+      `);
+    }
+    
+    const [encoded, signature] = parts;
+    const payload = simpleDecode(encoded);
+    
+    if (!payload) {
+      return c.html(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>加载失败</title>
+          <style>
+            body { margin: 0; padding: 20px; font-family: system-ui; background: #000; color: #fff; display: flex; align-items: center; justify-content: center; height: 100vh; }
+            .error { text-align: center; }
+          </style>
+        </head>
+        <body>
+          <div class="error">
+            <h1>❌</h1>
+            <p>无法解密令牌</p>
+          </div>
+        </body>
+        </html>
+      `);
+    }
+    
+    const data = JSON.parse(payload);
+    
+    // 验证时间令牌
+    if (!verifyTimeToken(data.t)) {
+      return c.html(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>加载失败</title>
+          <style>
+            body { margin: 0; padding: 20px; font-family: system-ui; background: #000; color: #fff; display: flex; align-items: center; justify-content: center; height: 100vh; }
+            .error { text-align: center; }
+          </style>
+        </head>
+        <body>
+          <div class="error">
+            <h1>⏱️</h1>
+            <p>令牌已过期</p>
+          </div>
+        </body>
+        </html>
+      `);
+    }
+    
+    // 验证签名
+    const expectedSignature = simpleHash(SECRET_KEY + encoded + data.t);
+    if (signature !== expectedSignature) {
+      return c.html(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>加载失败</title>
+          <style>
+            body { margin: 0; padding: 20px; font-family: system-ui; background: #000; color: #fff; display: flex; align-items: center; justify-content: center; height: 100vh; }
+            .error { text-align: center; }
+          </style>
+        </head>
+        <body>
+          <div class="error">
+            <h1>🔐</h1>
+            <p>签名验证失败</p>
+          </div>
+        </body>
+        </html>
+      `);
+    }
+    
+    const gameUrl = data.url;
+    
+    console.log('🎮 Game proxy access:', { gameId: data.gid, urlLength: gameUrl.length });
+    
+    // 返回一个HTML页面，使用iframe嵌入游戏
+    // 关键：真实URL只在这个HTML中，用户在开发者工具中看到的iframe src是/api/game-proxy
+    return c.html(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <title>游戏加载中...</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+          iframe { 
+            position: absolute; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            border: 0; 
+            display: block;
+          }
+          .loader {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-family: system-ui, -apple-system, sans-serif;
+            text-align: center;
+            z-index: 9999;
+          }
+          .loader.hidden { display: none; }
+          .spinner {
+            width: 40px;
+            height: 40px;
+            margin: 0 auto 20px;
+            border: 4px solid rgba(255,255,255,0.1);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+          }
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="loader" id="loader">
+          <div class="spinner"></div>
+          <p>游戏加载中...</p>
+        </div>
+        <iframe 
+          id="gameFrame"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+          allowfullscreen
+          sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-pointer-lock allow-top-navigation"
+        ></iframe>
+        <script>
+          // 🔐 动态设置iframe src，进一步混淆
+          (function() {
+            const gameUrl = ${JSON.stringify(gameUrl)};
+            const frame = document.getElementById('gameFrame');
+            const loader = document.getElementById('loader');
+            
+            // 延迟设置src，让加载动画先显示
+            setTimeout(() => {
+              frame.src = gameUrl;
+              
+              // 监听iframe加载完成
+              frame.onload = function() {
+                loader.classList.add('hidden');
+              };
+              
+              // 10秒后如果还没加载完，也隐藏加载器
+              setTimeout(() => {
+                loader.classList.add('hidden');
+              }, 10000);
+            }, 500);
+            
+            // 防止右键查看源代码
+            document.addEventListener('contextmenu', e => e.preventDefault());
+          })();
+        </script>
+      </body>
+      </html>
+    `);
+  } catch (error) {
+    console.error('❌ Game proxy error:', error);
+    return c.html(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>加载失败</title>
+        <style>
+          body { margin: 0; padding: 20px; font-family: system-ui; background: #000; color: #fff; display: flex; align-items: center; justify-content: center; height: 100vh; }
+          .error { text-align: center; }
+        </style>
+      </head>
+      <body>
+        <div class="error">
+          <h1>💥</h1>
+          <p>游戏加载失败</p>
+          <p style="font-size: 12px; opacity: 0.5; margin-top: 10px;">${error.message}</p>
+        </div>
+      </body>
+      </html>
+    `);
+  }
+});
+
 // Admin role helper endpoints (used by frontend to show admin entries)
 app.get('/api/admin/is-super-admin', async (c) => {
   try {
