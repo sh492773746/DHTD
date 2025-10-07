@@ -2535,6 +2535,7 @@ app.delete('/api/admin/users/:id', async (c) => {
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     
     let supabaseDeleteSuccess = false;
+    let supabaseAlreadyDeleted = false;
     
     if (supabaseUrl && serviceRoleKey) {
       try {
@@ -2551,6 +2552,11 @@ app.delete('/api/admin/users/:id', async (c) => {
         
         if (response.ok) {
           supabaseDeleteSuccess = true;
+        } else if (response.status === 404) {
+          // 用户在 Supabase 中不存在（可能已被删除），视为成功
+          supabaseDeleteSuccess = true;
+          supabaseAlreadyDeleted = true;
+          console.log(`User ${targetUserId} not found in Supabase (already deleted)`);
         } else {
           const errorText = await response.text();
           console.error('Supabase delete failed:', errorText);
@@ -2561,7 +2567,11 @@ app.delete('/api/admin/users/:id', async (c) => {
         deletedData.errors.push('supabase: ' + e.message);
       }
     } else {
-      deletedData.errors.push('supabase: Missing credentials');
+      // 如果没有 Supabase 凭证，但 Turso 数据已删除，也视为部分成功
+      console.warn('Missing Supabase credentials, only Turso data deleted');
+      deletedData.errors.push('supabase: Missing credentials (only Turso data deleted)');
+      // 仍然返回成功，因为至少 Turso 数据已清理
+      supabaseDeleteSuccess = true;
     }
     
     // Return result

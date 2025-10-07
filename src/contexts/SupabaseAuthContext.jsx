@@ -228,25 +228,131 @@ export const AuthProvider = ({ children }) => {
 
   const loading = !isInitialized;
   
+  // 将 Supabase 错误转换为人性化的中文提示
+  const getHumanReadableError = useCallback((error) => {
+    if (!error) return "发生未知错误";
+    
+    const errorMessage = error.message?.toLowerCase() || '';
+    const errorCode = error.code || '';
+    
+    // 邮箱相关错误
+    if (errorMessage.includes('user already registered') || errorCode === 'user_already_exists') {
+      return "该邮箱已被注册。如果是您的账号，请直接登录；如果忘记密码，可以使用找回密码功能。";
+    }
+    
+    if (errorMessage.includes('email not confirmed') || errorMessage.includes('email address not confirmed')) {
+      return "您的邮箱尚未验证。请检查您的邮箱（包括垃圾邮件箱），点击验证链接后再登录。";
+    }
+    
+    // 密码相关错误
+    if (errorMessage.includes('invalid login credentials') || errorMessage.includes('invalid credentials')) {
+      return "邮箱或密码错误。请检查您的输入，或使用找回密码功能。";
+    }
+    
+    if (errorMessage.includes('password should be at least') || errorMessage.includes('password is too short')) {
+      return "密码太短，至少需要 6 个字符。请设置一个更强的密码。";
+    }
+    
+    if (errorMessage.includes('password') && errorMessage.includes('weak')) {
+      return "密码强度不够。建议使用字母、数字和特殊字符的组合。";
+    }
+    
+    // 邮箱格式错误
+    if (errorMessage.includes('invalid email') || errorMessage.includes('unable to validate email')) {
+      return "邮箱格式不正确。请输入有效的邮箱地址，如 example@email.com";
+    }
+    
+    // 网络相关错误
+    if (errorMessage.includes('fetch') || errorMessage.includes('network')) {
+      return "网络连接失败。请检查您的网络连接后重试。";
+    }
+    
+    if (errorMessage.includes('timeout')) {
+      return "请求超时。网络可能较慢，请稍后重试。";
+    }
+    
+    // 频率限制
+    if (errorMessage.includes('rate limit') || errorMessage.includes('too many requests')) {
+      return "操作过于频繁。请稍等片刻后再试。";
+    }
+    
+    // 验证码相关
+    if (errorMessage.includes('otp') && errorMessage.includes('expired')) {
+      return "验证码已过期。请重新获取验证码。";
+    }
+    
+    if (errorMessage.includes('otp') && errorMessage.includes('invalid')) {
+      return "验证码不正确。请检查您输入的验证码。";
+    }
+    
+    // 邮件发送
+    if (errorMessage.includes('email') && errorMessage.includes('send')) {
+      return "邮件发送失败。请检查邮箱地址是否正确，或稍后重试。";
+    }
+    
+    // 账号被禁用
+    if (errorMessage.includes('user banned') || errorMessage.includes('account disabled')) {
+      return "您的账号已被禁用。如有疑问，请联系管理员。";
+    }
+    
+    // 会话过期
+    if (errorMessage.includes('session') && errorMessage.includes('expired')) {
+      return "登录已过期。请重新登录。";
+    }
+    
+    // 默认返回原始错误（如果没有匹配到）
+    return error.message || "操作失败，请稍后重试。";
+  }, []);
+
   const signUp = useCallback(async (email, password, options) => {
     const { data, error } = await fetchWithRetry(() => supabaseClient.auth.signUp({ email, password, options: { ...options, data: { hostname: window.location.hostname } }}));
     if (error) {
-      toast({ variant: "destructive", title: "注册失败", description: error.message || "发生未知错误" });
+      const humanError = getHumanReadableError(error);
+      toast({ 
+        variant: "destructive", 
+        title: "注册失败", 
+        description: humanError,
+        duration: 6000, // 显示更长时间，让用户看清详细信息
+      });
     } else if (data.user) {
-      toast({ title: "注册成功", description: "请检查您的邮箱以完成验证。" });
+      // 检查是否已注册但未验证
+      if (data.user.identities && data.user.identities.length === 0) {
+        toast({
+          variant: "destructive",
+          title: "该邮箱已被注册",
+          description: "此邮箱已注册但尚未验证。请检查您的邮箱（包括垃圾邮件箱）完成验证，或使用其他邮箱注册。",
+          duration: 8000,
+        });
+      } else {
+        toast({ 
+          title: "注册成功！", 
+          description: "📧 验证邮件已发送到您的邮箱，请查收并点击链接完成验证。如未收到，请检查垃圾邮件箱。",
+          duration: 8000,
+        });
+      }
     }
     return { data, error };
-  }, [toast]);
+  }, [toast, getHumanReadableError]);
 
   const signIn = useCallback(async (email, password) => {
     const { data, error } = await fetchWithRetry(() => supabaseClient.auth.signInWithPassword({ email, password }));
     if (error) {
-      toast({ variant: "destructive", title: "登录失败", description: error.message || "发生未知错误" });
+      const humanError = getHumanReadableError(error);
+      toast({ 
+        variant: "destructive", 
+        title: "登录失败", 
+        description: humanError,
+        duration: 6000,
+      });
     } else if (data.user) {
-      toast({ title: "登录成功", description: `欢迎回来, ${data.user.email}!` });
+      toast({ 
+        title: "登录成功！", 
+        description: `🎉 欢迎回来，${data.user.email}!`,
+        duration: 3000,
+      });
     }
     return { data, error };
-}, [toast]);
+  }, [toast, getHumanReadableError]);
 
   const refreshProfile = useCallback(() => {
       if (user?.id) {
