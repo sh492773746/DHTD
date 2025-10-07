@@ -23,6 +23,7 @@ import PointsHistory from '@/pages/PointsHistory';
 import Notifications from '@/pages/Notifications';
 import Dashboard from '@/pages/Dashboard';
 import GameCenter from '@/pages/GameCenter';
+import LandingPage from '@/pages/LandingPage';
 // import PointsMall from '@/pages/PointsMall';
 
 // Auth Pages
@@ -57,6 +58,10 @@ const routerConfig = [
     path: '/',
     element: <Root />,
     children: [
+      {
+        path: 'landing',
+        element: <LandingPage />,
+      },
       {
         path: 'auth',
         element: <AuthPage />,

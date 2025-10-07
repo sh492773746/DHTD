@@ -84,4 +84,44 @@ export const pageConfig = {
       ]},
     ],
   },
+  landing: {
+    name: '发布页/引导页',
+    sections: [
+      { id: 'landing_hero', name: '主标题区', tenantEditable: true, fields: [
+        { id: 'title', label: '主标题', type: 'text', placeholder: '欢迎来到我们的平台' },
+        { id: 'subtitle', label: '副标题', type: 'text', placeholder: '体验极致娱乐' },
+        { id: 'background_image', label: '背景图片', type: 'image', hint: '推荐尺寸: 1920x1080px' },
+        { id: 'logo_url', label: 'Logo图片', type: 'image', hint: '推荐尺寸: 200x200px' },
+      ]},
+      { id: 'landing_features', name: '特色功能', tenantEditable: true, fields: [
+        { id: 'title', label: '功能标题', type: 'text' },
+        { id: 'description', label: '功能描述', type: 'textarea' },
+        { id: 'icon', label: '图标', type: 'icon' },
+        { id: 'gradient', label: '渐变色', type: 'select', options: [
+          { value: 'from-blue-500 to-cyan-500', label: '蓝色 -> 青色' },
+          { value: 'from-purple-500 to-pink-500', label: '紫色 -> 粉色' },
+          { value: 'from-green-500 to-emerald-500', label: '绿色 -> 翡翠绿' },
+          { value: 'from-orange-500 to-red-500', label: '橙色 -> 红色' },
+          { value: 'from-indigo-500 to-purple-500', label: '靛蓝 -> 紫色' },
+          { value: 'from-yellow-500 to-orange-500', label: '黄色 -> 橙色' },
+        ]},
+      ], batchImport: true },
+      { id: 'landing_cta', name: '行动号召按钮', tenantEditable: true, fields: [
+        { id: 'text', label: '按钮文字', type: 'text', placeholder: '立即进入' },
+        { id: 'link', label: '跳转链接', type: 'text', placeholder: '/dashboard' },
+        { id: 'style', label: '按钮样式', type: 'select', options: [
+          { value: 'primary', label: '主色调' },
+          { value: 'gradient-blue', label: '蓝色渐变' },
+          { value: 'gradient-purple', label: '紫色渐变' },
+          { value: 'gradient-green', label: '绿色渐变' },
+          { value: 'neon', label: '霓虹效果' },
+        ]},
+      ]},
+      { id: 'landing_stats', name: '数据统计', tenantEditable: true, fields: [
+        { id: 'label', label: '标签', type: 'text', placeholder: '注册用户' },
+        { id: 'value', label: '数值', type: 'text', placeholder: '10000+' },
+        { id: 'icon', label: '图标', type: 'icon' },
+      ], batchImport: true },
+    ],
+  },
 };
