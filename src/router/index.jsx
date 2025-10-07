@@ -86,19 +86,19 @@ const routerConfig = [
           },
           {
             path: 'prediction',
-            element: <ProtectedRoute><Prediction /></ProtectedRoute>,
+            element: <Prediction />,
           },
           {
             path: 'prediction/jnd28',
-            element: <ProtectedRoute><PredictionJnd28 /></ProtectedRoute>,
+            element: <PredictionJnd28 />,
           },
           {
             path: 'prediction/ff28',
-            element: <ProtectedRoute><PredictionFf28 /></ProtectedRoute>,
+            element: <PredictionFf28 />,
           },
           {
             path: 'prediction/bit28',
-            element: <ProtectedRoute><PredictionBit28 /></ProtectedRoute>,
+            element: <PredictionBit28 />,
           },
           {
             path: 'games',
@@ -106,7 +106,7 @@ const routerConfig = [
           },
           {
             path: 'games/prediction-28',
-            element: <ProtectedRoute><PredictionGame /></ProtectedRoute>,
+            element: <PredictionGame />,
           },
           {
             path: 'notifications',
