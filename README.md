@@ -19,16 +19,25 @@ npm run bff        # 後端 (http://localhost:8787)
 
 ## 📚 完整文檔
 
-**請查看 [PROJECT_DOCUMENTATION.md](./PROJECT_DOCUMENTATION.md) 獲取完整的技術文檔**，包含：
+### 🗂️ 技術文檔中心
+**所有技術文檔已整理至 [TechDocs/](./TechDocs/) 文件夾**
 
-- 📋 **項目概述** - 系統架構和部署流程
-- 🛠️ **技術棧** - 完整的技術棧列表
-- 🌐 **API 文檔** - 所有 API 端點詳細說明
-- 🗄️ **數據庫設計** - 完整的數據表結構
-- 🔐 **安全性** - 認證、授權和安全策略
-- ⚙️ **環境變量配置** - 所有環境變量說明
-- 🚀 **部署指南** - Vercel 和 Render 部署流程
-- 💻 **開發指南** - 開發規範和最佳實踐
+📖 **[查看文檔索引](./TechDocs/INDEX.md)** - 快速找到所需文檔
+
+#### 📌 核心文檔
+- 🚀 **[性能優化指南](./TechDocs/PERFORMANCE_OPTIMIZATION.md)** - LCP 優化、代碼分割、壓縮策略
+- 📦 **[依賴檢查報告](./TechDocs/DEPENDENCIES_CHECK.md)** - 依賴管理、健康檢查
+- 📋 **[項目完整文檔](./TechDocs/PROJECT_DOCUMENTATION.md)** - 架構、API、數據庫、部署
+
+#### 🛠️ 開發文檔
+- ⚛️ **[React 開發指南](./TechDocs/REACT_GUIDE.md)** - 組件開發、Hooks、狀態管理
+- 🔒 **[安全優化報告](./TechDocs/SECURITY_AND_OPTIMIZATION_REPORT.md)** - 安全策略、環境變量
+- 📊 **[性能優化完整指南](./TechDocs/PERFORMANCE_OPTIMIZATION_GUIDE.md)** - 前後端性能優化
+
+#### 🎮 功能文檔
+- 🎯 **[預測儀表板指南](./TechDocs/PREDICTION_DASHBOARD_GUIDE.md)** - 預測功能開發
+- 💰 **[積分同步修復](./TechDocs/POINTS_SYNC_FIX.md)** - 積分系統問題排查
+- 🚦 **[速率限制升級](./TechDocs/RATE_LIMITING_AUDIT_ERROR_UPGRADE_GUIDE.md)** - API 限流、審計
 
 ## 🌟 主要特性
 
@@ -75,7 +84,7 @@ Tailwind CSS          JWT/JWKS
 
 - **前端訪問**: https://dhtd.vercel.app
 - **後端 API**: https://dhtd.onrender.com
-- **完整文檔**: [PROJECT_DOCUMENTATION.md](./PROJECT_DOCUMENTATION.md)
+- **技術文檔**: [TechDocs/](./TechDocs/)
 
 ## 📝 開發流程
 
@@ -98,7 +107,7 @@ Tailwind CSS          JWT/JWKS
 
 ## 🔐 環境變量
 
-關鍵環境變量（完整列表見 [PROJECT_DOCUMENTATION.md](./PROJECT_DOCUMENTATION.md)）：
+關鍵環境變量（完整列表見 [項目文檔](./TechDocs/PROJECT_DOCUMENTATION.md)）：
 
 ```bash
 # Supabase
@@ -133,13 +142,14 @@ ALLOWED_ORIGINS=https://dhtd.vercel.app,https://tv28.cc
 
 ## ⚠️ 重要提醒
 
-**每次修改代碼後，請務必更新 [PROJECT_DOCUMENTATION.md](./PROJECT_DOCUMENTATION.md) 中的相應部分：**
+**每次修改代碼後，請務必更新 [TechDocs/](./TechDocs/) 中的相應文檔：**
 
-- ✅ API 文檔 (新增/修改端點時)
-- ✅ 數據庫設計 (新增/修改表時)
-- ✅ 環境變量配置 (新增變量時)
-- ✅ 技術棧 (新增依賴時)
-- ✅ 版本歷史 (重大更新時)
+- ✅ **API 文檔** - 新增/修改端點時更新 [PROJECT_DOCUMENTATION.md](./TechDocs/PROJECT_DOCUMENTATION.md)
+- ✅ **數據庫設計** - 新增/修改表時更新項目文檔
+- ✅ **環境變量配置** - 新增變量時更新項目文檔
+- ✅ **技術棧** - 新增依賴時更新 [DEPENDENCIES_CHECK.md](./TechDocs/DEPENDENCIES_CHECK.md)
+- ✅ **性能優化** - 性能改進時更新 [PERFORMANCE_OPTIMIZATION.md](./TechDocs/PERFORMANCE_OPTIMIZATION.md)
+- ✅ **版本歷史** - 重大更新時更新相關文檔
 
 ## 📄 許可證
 
@@ -147,4 +157,4 @@ MIT License
 
 ---
 
-**📖 更多詳細信息請查看 [完整技術文檔](./PROJECT_DOCUMENTATION.md)**
+**📖 更多詳細信息請查看 [技術文檔中心](./TechDocs/INDEX.md)**
