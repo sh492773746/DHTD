@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { pageConfig as basePageConfig } from '@/config/pageContentConfig';
 import ContentSection from '@/components/admin/ContentSection';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
+import { encryptUrl, decryptUrl } from '@/lib/urlEncryption';
 
 import { useTenant } from '@/contexts/TenantContext';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -160,10 +161,18 @@ const PageContentManager = () => {
         const currentItems = pageContent?.[activeSection] || [];
         const position = itemId ? currentItems.find(item => item.id === itemId)?.position : currentItems.length;
 
+        // 🔒 如果是游戏卡片，加密path字段（防爬虫）
+        let processedValues = { ...values };
+        if (activeSection === 'game_cards' && processedValues.path) {
+            console.log('🔒 加密游戏链接:', processedValues.path);
+            processedValues.path = encryptUrl(processedValues.path);
+            console.log('✅ 加密后:', processedValues.path);
+        }
+
         const contentData = {
             page: activePage,
             section: activeSection,
-            content: values,
+            content: processedValues,
             position: position,
             tenant_id: managedTenantId
         };
@@ -205,7 +214,16 @@ const PageContentManager = () => {
         let currentMaxPosition = currentItems.length > 0 ? Math.max(...currentItems.map(i => i.position)) : -1;
 
         try {
-            for (const itemContent of importedData) {
+            for (let itemContent of importedData) {
+                // 🔒 如果是游戏卡片，加密path字段（防爬虫）
+                if (section === 'game_cards' && itemContent.path) {
+                    console.log('🔒 批量导入：加密游戏链接:', itemContent.path);
+                    itemContent = {
+                        ...itemContent,
+                        path: encryptUrl(itemContent.path)
+                    };
+                }
+
                 currentMaxPosition += 1;
                 const body = {
             page,
@@ -226,8 +244,22 @@ const PageContentManager = () => {
     };
 
     const handleEdit = (item) => {
+        // 🔓 如果是游戏卡片，解密path字段供编辑
+        let itemToEdit = { ...item };
+        if (item.section === 'game_cards' && item.content?.path) {
+            console.log('🔓 解密游戏链接用于编辑:', item.content.path);
+            const decryptedPath = decryptUrl(item.content.path);
+            console.log('✅ 解密后:', decryptedPath);
+            itemToEdit = {
+                ...item,
+                content: {
+                    ...item.content,
+                    path: decryptedPath
+                }
+            };
+        }
         setActiveSection(item.section);
-        setEditingItem(item);
+        setEditingItem(itemToEdit);
         setIsFormOpen(true);
     };
 

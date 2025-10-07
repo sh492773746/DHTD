@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,7 @@ import { Gamepad2, Info, Download, Crown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/components/ui/use-toast';
 import { Badge } from '@/components/ui/badge';
-import { encryptGameUrl } from '@/lib/obfuscator';
+import { decryptUrl } from '@/lib/urlEncryption';
 
 const GameCard = ({ game }) => {
   const [isAlertOpen, setIsAlertOpen] = useState(false);
@@ -26,21 +26,17 @@ const GameCard = ({ game }) => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  // 🔒 解密游戏路径（防爬虫）
+  const decryptedPath = useMemo(() => decryptUrl(game?.path), [game?.path]);
+
   const isExternal = (path) => /^https?:\/\//i.test(String(path || ''));
 
   const handleNavigate = (path, requiresAuth) => {
     if (!path) return;
-    
-    // 🔐 安全处理：外部链接通过加密的游戏播放器打开
     if (isExternal(path)) {
-      const gameId = game.id || game.title || '';
-      const encryptedToken = encryptGameUrl(path, String(gameId));
-      const playerUrl = `/game-player?t=${encodeURIComponent(encryptedToken)}`;
-      navigate(playerUrl);
+      window.open(path, '_blank', 'noopener,noreferrer');
       return;
     }
-    
-    // 内部路径处理
     if (requiresAuth) {
       toast({
         title: "请先登录",
@@ -88,7 +84,7 @@ const GameCard = ({ game }) => {
       >
         <Card
           className="bg-secondary rounded-lg shadow-sm border border-border text-center p-1.5 sm:p-1 flex flex-col items-center justify-between aspect-square cursor-pointer card-hover"
-          onClick={() => handleNavigate(game.path, game.requiresAuth)}
+          onClick={() => handleNavigate(decryptedPath, game.requiresAuth)}
         >
           {game.isOfficial && (
             <div className="absolute top-0 right-0 z-10 scale-[0.65] sm:scale-[0.9] transform translate-x-[25%] translate-y-[-25%]">
@@ -146,7 +142,7 @@ const GameCard = ({ game }) => {
               <Download className="mr-2 h-4 w-4" />
               添加到桌面
             </Button>
-            <AlertDialogAction onClick={() => handleNavigate(game.path, game.requiresAuth)}>
+            <AlertDialogAction onClick={() => handleNavigate(decryptedPath, game.requiresAuth)}>
               进入游戏
             </AlertDialogAction>
           </AlertDialogFooter>
