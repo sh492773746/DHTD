@@ -237,12 +237,9 @@ export default defineConfig({
 	},
 	build: {
 		// 性能优化：启用压缩和代码分割
-		minify: 'terser',
-		terserOptions: {
-			compress: {
-				drop_console: true, // 生产环境移除 console
-				drop_debugger: true,
-			},
+		minify: 'esbuild', // 使用 esbuild（更快，内置，无需额外依赖）
+		esbuild: {
+			drop: ['console', 'debugger'], // 生产环境移除 console 和 debugger
 		},
 		// 优化 chunk 大小
 		chunkSizeWarningLimit: 1000,
