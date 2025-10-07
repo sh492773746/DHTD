@@ -2413,7 +2413,7 @@ app.post('/api/admin/users/cleanup-orphaned', async (c) => {
           await gdb.delete(commentsTable).where(eq(commentsTable.userId, orphan.id));
           
           // Delete posts
-          await gdb.delete(postsTable).where(eq(postsTable.userId, orphan.id));
+          await gdb.delete(postsTable).where(eq(postsTable.authorId, orphan.id));
           
           // Delete admin roles
           await gdb.delete(adminUsersTable).where(eq(adminUsersTable.userId, orphan.id));
@@ -2513,7 +2513,7 @@ app.delete('/api/admin/users/:id', async (c) => {
     
     // 1.4 Delete posts
     try {
-      await gdb.delete(postsTable).where(eq(postsTable.userId, targetUserId));
+      await gdb.delete(postsTable).where(eq(postsTable.authorId, targetUserId));
       deletedData.posts++;
     } catch (e) {
       console.error('Failed to delete posts:', e);

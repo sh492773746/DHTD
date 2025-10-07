@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import { motion } from 'framer-motion';
-import { supabaseClient } from '@/lib/supabaseClient';
+import { supabase } from '@/lib/supabaseClient';
 
 const AuthCallback = () => {
   const navigate = useNavigate();
@@ -26,7 +26,7 @@ const AuthCallback = () => {
           console.log('🔐 检测到认证 token，正在处理...');
           
           // 让 Supabase 处理认证回调
-          const { data, error } = await supabaseClient.auth.getSession();
+          const { data, error } = await supabase.auth.getSession();
           
           if (error) {
             console.error('❌ 会话获取失败:', error);
