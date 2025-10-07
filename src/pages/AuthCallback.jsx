@@ -18,12 +18,50 @@ const AuthCallback = () => {
         console.log('🔐 AuthCallback 页面加载');
         console.log('📍 当前 URL:', window.location.href);
         console.log('🔑 Hash:', window.location.hash);
+        console.log('🔍 Search:', window.location.search);
         
-        // Supabase 会自动通过 onAuthStateChange 处理 URL 中的 token
-        // 等待 Supabase 完成处理（通常需要1-2秒）
-        console.log('⏳ 等待 Supabase 处理认证 token...');
+        // 检查 URL 中是否有认证参数
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const queryParams = new URLSearchParams(window.location.search);
         
-        // 等待2秒让 Supabase 完成 auth state change
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+        const errorCode = hashParams.get('error');
+        const errorDescription = hashParams.get('error_description');
+        
+        // 检查是否有错误
+        if (errorCode) {
+          console.error('❌ URL 中包含错误:', errorCode, errorDescription);
+          throw new Error(errorDescription || errorCode);
+        }
+        
+        // 如果有 access_token，主动设置 session
+        if (accessToken && refreshToken) {
+          console.log('🔑 检测到 access_token，主动设置 session...');
+          
+          const { data, error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          
+          if (error) {
+            console.error('❌ 设置 session 失败:', error);
+            throw error;
+          }
+          
+          if (data.session) {
+            console.log('✅ Session 已设置:', data.session.user.email);
+            console.log('👤 用户 ID:', data.session.user.id);
+            
+            // 等待一下确保 AuthContext 更新
+            await new Promise(resolve => setTimeout(resolve, 500));
+            setProcessing(false);
+            return;
+          }
+        }
+        
+        // 如果没有 token，等待 Supabase 自动处理
+        console.log('⏳ 等待 Supabase 自动处理认证...');
         await new Promise(resolve => setTimeout(resolve, 2000));
         
         // 检查是否获取到 session
@@ -49,7 +87,7 @@ const AuthCallback = () => {
           variant: 'destructive',
           title: '验证失败',
           description: error.message || '无法完成邮箱验证，请重试。',
-          duration: 5000,
+          duration: 6000,
         });
         setTimeout(() => navigate('/auth'), 2000);
       }
