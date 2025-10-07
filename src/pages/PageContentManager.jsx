@@ -133,6 +133,7 @@ const PageContentManager = () => {
     });
 
     const invalidateContentQueries = useCallback(() => {
+        // 刷新后台管理页面的缓存
         queryClient.invalidateQueries({ queryKey: ['pageContent', managedTenantId, activePage, sectionsKey, !!token] });
         queryClient.invalidateQueries({ queryKey: ['dashboardContent', managedTenantId] });
         queryClient.invalidateQueries({ queryKey: ['gamesData', managedTenantId] });
@@ -140,6 +141,17 @@ const PageContentManager = () => {
         queryClient.invalidateQueries({ queryKey: ['gameCategories', managedTenantId] });
         // ensure social pinned ads refresh on Social page
         queryClient.invalidateQueries({ queryKey: ['pageContent', 'social', 'pinned_ads'] });
+        
+        // 🔥 关键修复：刷新前台页面的缓存
+        // 前台页面使用 ['pageContent', page, section] 格式
+        // 使用 queryKey 前缀匹配来刷新所有相关的前台页面缓存
+        queryClient.invalidateQueries({ 
+            predicate: (query) => {
+                // 匹配所有以 'pageContent' 开头的查询
+                // 这会刷新前台的 ['pageContent', 'home', 'carousel'] 等缓存
+                return query.queryKey[0] === 'pageContent';
+            }
+        });
     }, [queryClient, managedTenantId, activePage, sectionsKey, token]);
 
     const handleFormSubmit = async (values, itemId) => {
