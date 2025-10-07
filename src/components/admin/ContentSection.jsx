@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
-import { PlusCircle, Edit, Trash2, Upload, Trash } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Upload, Trash, Tag } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import BatchImportDialog from '@/components/admin/BatchImportDialog';
 import * as LucideIcons from 'lucide-react';
@@ -12,51 +14,87 @@ const renderIcon = (iconName) => {
     return IconComponent ? <IconComponent className="h-4 w-4 mr-2 text-foreground" /> : null;
 };
 
-const DesktopContentTable = ({ items, onEdit, onDelete, onToggleActive }) => (
-  <table className="w-full text-sm">
-    <thead className="text-left text-foreground bg-secondary">
-      <tr>
-        <th className="p-3 font-normal">内容摘要</th>
-        <th className="p-3 font-normal">排序</th>
-        <th className="p-3 font-normal">状态</th>
-        <th className="p-3 font-normal text-right">操作</th>
-      </tr>
-    </thead>
-    <tbody>
-      {items.map((item) => (
-        <tr key={item.id} className="border-t border-border">
-          <td className="p-3 max-w-xs truncate text-foreground flex items-center">
-            {item.content.icon && renderIcon(item.content.icon)}
-            {item.content.title || item.content.text || item.content.name || JSON.stringify(item.content)}
-          </td>
-          <td className="p-3 text-foreground">{item.position}</td>
-          <td className="p-3">
-            <Switch checked={item.is_active} onCheckedChange={() => onToggleActive(item)} />
-          </td>
-          <td className="p-3 text-right">
-            <Button variant="ghost" size="icon" onClick={() => onEdit(item)}><Edit className="h-4 w-4" /></Button>
-            <Button variant="ghost" size="icon" className="text-red-500" onClick={() => onDelete(item.id)}><Trash2 className="h-4 w-4" /></Button>
-          </td>
-        </tr>
-      ))}
-    </tbody>
-  </table>
-);
+const DesktopContentTable = ({ items, onEdit, onDelete, onToggleActive, enableSelection, selectedIds, onSelectItem, onSelectAll }) => {
+  const allSelected = enableSelection && items.length > 0 && items.every(item => selectedIds.includes(item.id));
+  const someSelected = enableSelection && selectedIds.length > 0 && !allSelected;
 
-const MobileContentCards = ({ items, onEdit, onDelete, onToggleActive }) => (
+  return (
+    <table className="w-full text-sm">
+      <thead className="text-left text-foreground bg-secondary">
+        <tr>
+          {enableSelection && (
+            <th className="p-3 font-normal w-12">
+              <Checkbox
+                checked={allSelected}
+                onCheckedChange={onSelectAll}
+                aria-label="全选"
+                className={someSelected ? "data-[state=checked]:bg-primary" : ""}
+              />
+            </th>
+          )}
+          <th className="p-3 font-normal">内容摘要</th>
+          <th className="p-3 font-normal">排序</th>
+          <th className="p-3 font-normal">状态</th>
+          <th className="p-3 font-normal text-right">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {items.map((item) => (
+          <tr key={item.id} className="border-t border-border">
+            {enableSelection && (
+              <td className="p-3">
+                <Checkbox
+                  checked={selectedIds.includes(item.id)}
+                  onCheckedChange={() => onSelectItem(item.id)}
+                  aria-label={`选择 ${item.content.title || item.id}`}
+                />
+              </td>
+            )}
+            <td className="p-3 max-w-xs truncate text-foreground flex items-center">
+              {item.content.icon && renderIcon(item.content.icon)}
+              {item.content.title || item.content.text || item.content.name || JSON.stringify(item.content)}
+            </td>
+            <td className="p-3 text-foreground">{item.position}</td>
+            <td className="p-3">
+              <Switch checked={item.is_active} onCheckedChange={() => onToggleActive(item)} />
+            </td>
+            <td className="p-3 text-right">
+              <Button variant="ghost" size="icon" onClick={() => onEdit(item)}><Edit className="h-4 w-4" /></Button>
+              <Button variant="ghost" size="icon" className="text-red-500" onClick={() => onDelete(item.id)}><Trash2 className="h-4 w-4" /></Button>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+};
+
+const MobileContentCards = ({ items, onEdit, onDelete, onToggleActive, enableSelection, selectedIds, onSelectItem }) => (
   <div className="space-y-3 p-4 bg-secondary rounded-b-md">
     {items.map(item => (
       <Card key={item.id} className="bg-background shadow-sm border border-border">
         <CardContent className="p-4">
-          <p className="text-sm font-medium text-foreground truncate flex items-center">
-            {item.content.icon && renderIcon(item.content.icon)}
-            {item.content.title || item.content.text || item.content.name || JSON.stringify(item.content)}
-          </p>
-          <div className="flex items-center justify-between mt-4 text-sm text-foreground">
-            <span>排序: {item.position}</span>
-            <div className="flex items-center space-x-2">
-              <span>状态</span>
-              <Switch checked={item.is_active} onCheckedChange={() => onToggleActive(item)} />
+          <div className="flex items-start gap-3">
+            {enableSelection && (
+              <Checkbox
+                checked={selectedIds.includes(item.id)}
+                onCheckedChange={() => onSelectItem(item.id)}
+                aria-label={`选择 ${item.content.title || item.id}`}
+                className="mt-1"
+              />
+            )}
+            <div className="flex-1">
+              <p className="text-sm font-medium text-foreground truncate flex items-center">
+                {item.content.icon && renderIcon(item.content.icon)}
+                {item.content.title || item.content.text || item.content.name || JSON.stringify(item.content)}
+              </p>
+              <div className="flex items-center justify-between mt-4 text-sm text-foreground">
+                <span>排序: {item.position}</span>
+                <div className="flex items-center space-x-2">
+                  <span>状态</span>
+                  <Switch checked={item.is_active} onCheckedChange={() => onToggleActive(item)} />
+                </div>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -73,10 +111,26 @@ const MobileContentCards = ({ items, onEdit, onDelete, onToggleActive }) => (
   </div>
 );
 
-const ContentSection = ({ sectionConfig, sectionContent, onEdit, onDelete, onReorder, onAddNew, onBatchImport, onRemoveDuplicates }) => {
+const ContentSection = ({ 
+    sectionConfig, 
+    sectionContent, 
+    onEdit, 
+    onDelete, 
+    onReorder, 
+    onAddNew, 
+    onBatchImport, 
+    onRemoveDuplicates,
+    onBatchUpdateCategory,
+    categoryOptions 
+}) => {
     const isDesktop = useMediaQuery('(min-width: 768px)');
     const itemCount = Array.isArray(sectionContent) ? sectionContent.length : 0;
     const [isImporting, setIsImporting] = useState(false);
+    const [selectedIds, setSelectedIds] = useState([]);
+    const [batchCategory, setBatchCategory] = useState('');
+
+    // 仅为游戏卡片启用多选功能
+    const enableSelection = sectionConfig.id === 'game_cards';
 
     const handleImportClick = () => {
         setIsImporting(true);
@@ -85,6 +139,41 @@ const ContentSection = ({ sectionConfig, sectionContent, onEdit, onDelete, onReo
     const handleToggleActive = async (item) => {
         // This is a placeholder. The actual implementation should be in PageContentManager
         console.log("Toggling active state for item:", item.id);
+    };
+
+    const handleSelectItem = (id) => {
+        setSelectedIds(prev => 
+            prev.includes(id) 
+                ? prev.filter(itemId => itemId !== id)
+                : [...prev, id]
+        );
+    };
+
+    const handleSelectAll = (checked) => {
+        if (checked) {
+            setSelectedIds(sectionContent.map(item => item.id));
+        } else {
+            setSelectedIds([]);
+        }
+    };
+
+    const handleBatchUpdate = () => {
+        if (selectedIds.length === 0) {
+            alert('请先选择要修改的游戏卡片');
+            return;
+        }
+        if (!batchCategory) {
+            alert('请选择分类');
+            return;
+        }
+        onBatchUpdateCategory(selectedIds, batchCategory);
+        setSelectedIds([]);
+        setBatchCategory('');
+    };
+
+    const handleClearSelection = () => {
+        setSelectedIds([]);
+        setBatchCategory('');
     };
 
     return (
@@ -114,12 +203,69 @@ const ContentSection = ({ sectionConfig, sectionContent, onEdit, onDelete, onReo
                         </Button>
                     </div>
                 </div>
+
+                {/* 批量操作工具栏 - 仅在有选中项时显示 */}
+                {enableSelection && selectedIds.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-3 p-4 bg-blue-50 dark:bg-blue-950 border-b border-border">
+                        <span className="text-sm font-medium text-foreground">
+                            已选择 <span className="text-blue-600 dark:text-blue-400">{selectedIds.length}</span> 项
+                        </span>
+                        <div className="flex items-center gap-2 flex-1 flex-wrap">
+                            <Select value={batchCategory} onValueChange={setBatchCategory}>
+                                <SelectTrigger className="w-[200px]">
+                                    <SelectValue placeholder="选择分类" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {categoryOptions && categoryOptions.map(cat => (
+                                        <SelectItem key={cat.value} value={cat.value}>
+                                            {cat.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <Button 
+                                onClick={handleBatchUpdate} 
+                                size="sm" 
+                                className="bg-blue-600 hover:bg-blue-700 text-white"
+                            >
+                                <Tag className="mr-2 h-4 w-4" />
+                                批量设置分类
+                            </Button>
+                            <Button 
+                                onClick={handleClearSelection} 
+                                size="sm" 
+                                variant="outline"
+                            >
+                                取消选择
+                            </Button>
+                        </div>
+                    </div>
+                )}
                 
                 <CardContent className="p-0">
                 {itemCount > 0 ? (
                     isDesktop ? 
-                    <DesktopContentTable items={sectionContent} onEdit={onEdit} onDelete={onDelete} onToggleActive={handleToggleActive} onReorder={onReorder} /> :
-                    <MobileContentCards items={sectionContent} onEdit={onEdit} onDelete={onDelete} onToggleActive={handleToggleActive} onReorder={onReorder} />
+                    <DesktopContentTable 
+                        items={sectionContent} 
+                        onEdit={onEdit} 
+                        onDelete={onDelete} 
+                        onToggleActive={handleToggleActive} 
+                        onReorder={onReorder}
+                        enableSelection={enableSelection}
+                        selectedIds={selectedIds}
+                        onSelectItem={handleSelectItem}
+                        onSelectAll={handleSelectAll}
+                    /> :
+                    <MobileContentCards 
+                        items={sectionContent} 
+                        onEdit={onEdit} 
+                        onDelete={onDelete} 
+                        onToggleActive={handleToggleActive} 
+                        onReorder={onReorder}
+                        enableSelection={enableSelection}
+                        selectedIds={selectedIds}
+                        onSelectItem={handleSelectItem}
+                    />
                 ) : (
                     <div className="text-center p-8">
                         <p className="text-muted-foreground">此模块下暂无内容项。</p>

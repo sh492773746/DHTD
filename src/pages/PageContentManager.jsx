@@ -291,6 +291,50 @@ const PageContentManager = () => {
             setIsSubmitting(false);
         }
     };
+
+    const handleBatchUpdateCategory = async (itemIds, categorySlug) => {
+        if (itemIds.length === 0) {
+            toast({ title: '提示', description: '没有选中的项目' });
+            return;
+        }
+
+        if (!confirm(`确定要将 ${itemIds.length} 个游戏卡片的分类修改为 "${categoryOptions.find(c => c.value === categorySlug)?.label}"？`)) {
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            // 批量更新每个项目的分类
+            for (const itemId of itemIds) {
+                const item = pageContent?.['game_cards']?.find(i => i.id === itemId);
+                if (!item) continue;
+
+                const updatedContent = {
+                    ...item.content,
+                    category: categorySlug
+                };
+
+                await bffJson(`/api/admin/page-content/${itemId}?tenantId=${managedTenantId}`, {
+                    token,
+                    method: 'PUT',
+                    body: {
+                        ...item,
+                        content: updatedContent
+                    }
+                });
+            }
+
+            toast({ 
+                title: '批量更新成功', 
+                description: `已更新 ${itemIds.length} 个游戏卡片的分类` 
+            });
+            invalidateContentQueries();
+        } catch (e) {
+            toast({ title: '批量更新失败', description: e.message, variant: 'destructive' });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
     
     const isManagingSubTenant = isSuperAdmin && managedTenantId !== 0;
 
@@ -359,6 +403,8 @@ const PageContentManager = () => {
                                             onAddNew={() => handleAddNew(section.id)}
                                             onBatchImport={(data) => handleBatchImport(data, pageId, section.id)}
                                             onRemoveDuplicates={() => handleRemoveDuplicates(pageId, section.id)}
+                                            onBatchUpdateCategory={handleBatchUpdateCategory}
+                                            categoryOptions={categoryOptions}
                                         />
                                     ))}
                                 </div>
