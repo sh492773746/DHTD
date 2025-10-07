@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
-import { PlusCircle, Edit, Trash2, Upload, Trash, Tag } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Upload, Trash, Tag, Filter } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import BatchImportDialog from '@/components/admin/BatchImportDialog';
 import * as LucideIcons from 'lucide-react';
@@ -124,13 +125,57 @@ const ContentSection = ({
     categoryOptions 
 }) => {
     const isDesktop = useMediaQuery('(min-width: 768px)');
-    const itemCount = Array.isArray(sectionContent) ? sectionContent.length : 0;
     const [isImporting, setIsImporting] = useState(false);
     const [selectedIds, setSelectedIds] = useState([]);
     const [batchCategory, setBatchCategory] = useState('');
+    const [filterCategory, setFilterCategory] = useState('all'); // 'all' | 'uncategorized' | category_slug
 
     // 仅为游戏卡片启用多选功能
     const enableSelection = sectionConfig.id === 'game_cards';
+    const enableCategoryFilter = sectionConfig.id === 'game_cards';
+
+    // 根据分类筛选内容
+    const filteredContent = useMemo(() => {
+        if (!enableCategoryFilter || !Array.isArray(sectionContent)) {
+            return sectionContent;
+        }
+
+        if (filterCategory === 'all') {
+            return sectionContent;
+        }
+
+        if (filterCategory === 'uncategorized') {
+            return sectionContent.filter(item => !item.content?.category_slug);
+        }
+
+        return sectionContent.filter(item => item.content?.category_slug === filterCategory);
+    }, [sectionContent, filterCategory, enableCategoryFilter]);
+
+    const itemCount = Array.isArray(filteredContent) ? filteredContent.length : 0;
+    const totalItemCount = Array.isArray(sectionContent) ? sectionContent.length : 0;
+
+    // 统计各分类的游戏数量
+    const categoryStats = useMemo(() => {
+        if (!enableCategoryFilter || !Array.isArray(sectionContent)) {
+            return {};
+        }
+
+        const stats = {
+            all: sectionContent.length,
+            uncategorized: 0,
+        };
+
+        sectionContent.forEach(item => {
+            const catSlug = item.content?.category_slug;
+            if (!catSlug) {
+                stats.uncategorized++;
+            } else {
+                stats[catSlug] = (stats[catSlug] || 0) + 1;
+            }
+        });
+
+        return stats;
+    }, [sectionContent, enableCategoryFilter]);
 
     const handleImportClick = () => {
         setIsImporting(true);
@@ -151,7 +196,7 @@ const ContentSection = ({
 
     const handleSelectAll = (checked) => {
         if (checked) {
-            setSelectedIds(sectionContent.map(item => item.id));
+            setSelectedIds(filteredContent.map(item => item.id));
         } else {
             setSelectedIds([]);
         }
@@ -204,6 +249,53 @@ const ContentSection = ({
                     </div>
                 </div>
 
+                {/* 分类筛选器 - 仅游戏卡片显示 */}
+                {enableCategoryFilter && (
+                    <div className="p-4 border-b border-border bg-gray-50 dark:bg-gray-900">
+                        <div className="flex items-center gap-2 mb-3">
+                            <Filter className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm font-medium text-foreground">按分类筛选</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <Badge
+                                variant={filterCategory === 'all' ? 'default' : 'outline'}
+                                className="cursor-pointer hover:bg-primary/80 transition-colors"
+                                onClick={() => setFilterCategory('all')}
+                            >
+                                全部 ({categoryStats.all || 0})
+                            </Badge>
+                            <Badge
+                                variant={filterCategory === 'uncategorized' ? 'default' : 'outline'}
+                                className="cursor-pointer hover:bg-primary/80 transition-colors"
+                                onClick={() => setFilterCategory('uncategorized')}
+                            >
+                                未归类 ({categoryStats.uncategorized || 0})
+                            </Badge>
+                            {categoryOptions && categoryOptions.map(cat => (
+                                <Badge
+                                    key={cat.value}
+                                    variant={filterCategory === cat.value ? 'default' : 'outline'}
+                                    className="cursor-pointer hover:bg-primary/80 transition-colors"
+                                    onClick={() => setFilterCategory(cat.value)}
+                                >
+                                    {cat.label} ({categoryStats[cat.value] || 0})
+                                </Badge>
+                            ))}
+                        </div>
+                        {filterCategory !== 'all' && (
+                            <div className="mt-2 text-xs text-muted-foreground">
+                                当前筛选：
+                                <span className="font-medium text-foreground ml-1">
+                                    {filterCategory === 'uncategorized' 
+                                        ? '未归类' 
+                                        : categoryOptions?.find(c => c.value === filterCategory)?.label || filterCategory}
+                                </span>
+                                <span className="ml-2">显示 {itemCount} / {totalItemCount} 项</span>
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 {/* 批量操作工具栏 - 仅在有选中项时显示 */}
                 {enableSelection && selectedIds.length > 0 && (
                     <div className="flex flex-wrap items-center gap-3 p-4 bg-blue-50 dark:bg-blue-950 border-b border-border">
@@ -246,7 +338,7 @@ const ContentSection = ({
                 {itemCount > 0 ? (
                     isDesktop ? 
                     <DesktopContentTable 
-                        items={sectionContent} 
+                        items={filteredContent} 
                         onEdit={onEdit} 
                         onDelete={onDelete} 
                         onToggleActive={handleToggleActive} 
@@ -257,7 +349,7 @@ const ContentSection = ({
                         onSelectAll={handleSelectAll}
                     /> :
                     <MobileContentCards 
-                        items={sectionContent} 
+                        items={filteredContent} 
                         onEdit={onEdit} 
                         onDelete={onDelete} 
                         onToggleActive={handleToggleActive} 
@@ -268,7 +360,11 @@ const ContentSection = ({
                     />
                 ) : (
                     <div className="text-center p-8">
-                        <p className="text-muted-foreground">此模块下暂无内容项。</p>
+                        <p className="text-muted-foreground">
+                            {enableCategoryFilter && filterCategory !== 'all' 
+                                ? `当前筛选条件下暂无内容项` 
+                                : '此模块下暂无内容项。'}
+                        </p>
                     </div>
                 )}
                 </CardContent>
