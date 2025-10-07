@@ -331,12 +331,12 @@ const PageContentManager = () => {
 
                 const updatedContent = {
                     ...currentContent,
-                    category: categorySlug
+                    category_slug: categorySlug  // ✅ 正确的字段名
                 };
 
                 console.log(`🔄 更新游戏卡片 ID=${itemId}:`, {
-                    oldCategory: currentContent.category,
-                    newCategory: categorySlug,
+                    oldCategorySlug: currentContent.category_slug,
+                    newCategorySlug: categorySlug,
                     title: currentContent.title
                 });
 
@@ -358,7 +358,7 @@ const PageContentManager = () => {
                     successCount++;
                     console.log(`✅ ID=${itemId} 更新成功`, {
                         title: currentContent.title,
-                        newCategory: categorySlug
+                        newCategorySlug: categorySlug
                     });
                 } catch (error) {
                     failCount++;
