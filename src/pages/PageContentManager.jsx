@@ -314,12 +314,17 @@ const PageContentManager = () => {
                     category: categorySlug
                 };
 
-                await bffJson(`/api/admin/page-content/${itemId}?tenantId=${managedTenantId}`, {
+                // 使用和单个编辑相同的请求格式
+                await bffJson(`/api/admin/page-content/${itemId}`, {
                     token,
                     method: 'PUT',
                     body: {
-                        ...item,
-                        content: updatedContent
+                        page: item.page,
+                        section: item.section,
+                        content: updatedContent,
+                        position: item.position,
+                        tenant_id: managedTenantId,
+                        id: itemId
                     }
                 });
             }
@@ -330,6 +335,7 @@ const PageContentManager = () => {
             });
             invalidateContentQueries();
         } catch (e) {
+            console.error('批量更新错误:', e);
             toast({ title: '批量更新失败', description: e.message, variant: 'destructive' });
         } finally {
             setIsSubmitting(false);
