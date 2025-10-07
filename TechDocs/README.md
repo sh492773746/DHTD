@@ -24,12 +24,13 @@
 7. **[Landing Page 配置指南](./LANDING_PAGE_GUIDE.md)** - 发布页配置教程
 8. **[用户注册问题排查](./USER_REGISTRATION_TROUBLESHOOTING.md)** - 邮箱验证、数据同步
 9. **[邮箱验证跳转修复](./SUPABASE_EMAIL_REDIRECT_FIX.md)** - 验证链接不跳转到网站
-10. **[多域名邮箱验证配置](./MULTI_DOMAIN_EMAIL_SETUP.md)** - 多域名和分站认证 🆕
-11. **[用户数据存储架构](./USER_DATA_STORAGE.md)** - 数据存储位置和结构
-12. **[用户级联删除实现](./USER_CASCADE_DELETE_GUIDE.md)** - 删除用户自动清理数据
-13. **[预测仪表板指南](./PREDICTION_DASHBOARD_GUIDE.md)** - 预测功能
-14. **[积分同步修复](./POINTS_SYNC_FIX.md)** - 积分系统问题排查
-15. **[速率限制升级](./RATE_LIMITING_AUDIT_ERROR_UPGRADE_GUIDE.md)** - API 限流
+10. **[多域名邮箱验证配置](./MULTI_DOMAIN_EMAIL_SETUP.md)** - 多域名和分站认证
+11. **[邮箱验证超时修复](./EMAIL_VERIFICATION_TIMEOUT_FIX.md)** - "登录超时"问题解决 🆕
+12. **[用户数据存储架构](./USER_DATA_STORAGE.md)** - 数据存储位置和结构
+13. **[用户级联删除实现](./USER_CASCADE_DELETE_GUIDE.md)** - 删除用户自动清理数据
+14. **[预测仪表板指南](./PREDICTION_DASHBOARD_GUIDE.md)** - 预测功能
+15. **[积分同步修复](./POINTS_SYNC_FIX.md)** - 积分系统问题排查
+16. **[速率限制升级](./RATE_LIMITING_AUDIT_ERROR_UPGRADE_GUIDE.md)** - API 限流
 
 ---
 
@@ -39,7 +40,8 @@
 - 🎨 **配置 Landing Page？** → [LANDING_PAGE_GUIDE.md](./LANDING_PAGE_GUIDE.md)
 - 📧 **用户注册问题？** → [USER_REGISTRATION_TROUBLESHOOTING.md](./USER_REGISTRATION_TROUBLESHOOTING.md)
 - 🔗 **验证邮件不跳转？** → [SUPABASE_EMAIL_REDIRECT_FIX.md](./SUPABASE_EMAIL_REDIRECT_FIX.md)
-- 🌐 **多域名/分站认证？** → [MULTI_DOMAIN_EMAIL_SETUP.md](./MULTI_DOMAIN_EMAIL_SETUP.md) 🆕
+- 🌐 **多域名/分站认证？** → [MULTI_DOMAIN_EMAIL_SETUP.md](./MULTI_DOMAIN_EMAIL_SETUP.md)
+- ⏰ **验证显示"登录超时"？** → [EMAIL_VERIFICATION_TIMEOUT_FIX.md](./EMAIL_VERIFICATION_TIMEOUT_FIX.md) 🆕
 - 💾 **用户数据在哪？** → [USER_DATA_STORAGE.md](./USER_DATA_STORAGE.md)
 - 🗑️ **删除用户？** → [USER_CASCADE_DELETE_GUIDE.md](./USER_CASCADE_DELETE_GUIDE.md)
 - 🐛 **性能问题？** → [PERFORMANCE_OPTIMIZATION.md](./PERFORMANCE_OPTIMIZATION.md)

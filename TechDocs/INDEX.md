@@ -56,11 +56,17 @@
   - Redirect URLs 配置
   - 完整测试流程
 
-- [MULTI_DOMAIN_EMAIL_SETUP.md](./MULTI_DOMAIN_EMAIL_SETUP.md) - **多域名邮箱验证配置** 🆕
+- [MULTI_DOMAIN_EMAIL_SETUP.md](./MULTI_DOMAIN_EMAIL_SETUP.md) - **多域名邮箱验证配置**
   - 支持多个域名 (tv28.cc, dahai.ws, dhtd.vercel.app)
   - 分站自动认证
   - 动态重定向配置
   - 完整测试流程
+
+- [EMAIL_VERIFICATION_TIMEOUT_FIX.md](./EMAIL_VERIFICATION_TIMEOUT_FIX.md) - **邮箱验证超时修复** 🆕
+  - "登录超时"问题解决
+  - 主动处理认证 token
+  - Session 生成流程
+  - 调试指南
 
 - [USER_DATA_STORAGE.md](./USER_DATA_STORAGE.md) - **用户数据存储架构**
   - 数据存储位置说明
