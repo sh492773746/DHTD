@@ -791,7 +791,11 @@ app.get('/api/game-proxy', async (c) => {
     
     const gameUrl = data.url;
     
-    console.log('🎮 Game proxy access:', { gameId: data.gid, urlLength: gameUrl.length });
+    console.log('🎮 Game proxy access:', { 
+      gameId: data.gid, 
+      gameUrl: gameUrl,  // 显示完整URL用于调试
+      urlLength: gameUrl.length 
+    });
     
     // 返回一个HTML页面，使用iframe嵌入游戏
     // 关键：真实URL只在这个HTML中，用户在开发者工具中看到的iframe src是/api/game-proxy
@@ -804,7 +808,44 @@ app.get('/api/game-proxy', async (c) => {
         <title>游戏加载中...</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+          html, body { 
+            width: 100%; 
+            height: 100%; 
+            overflow: hidden; 
+            background: #000; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          
+          /* 9:16 竖屏容器 */
+          .game-container {
+            position: relative;
+            width: 100%;
+            max-width: 100vh * 9 / 16; /* 最大宽度基于高度的9/16 */
+            height: 100%;
+            margin: 0 auto;
+            background: #000;
+          }
+          
+          /* 移动端优先：占满屏幕 */
+          @media (max-width: 768px) {
+            .game-container {
+              max-width: 100%;
+              width: 100%;
+            }
+          }
+          
+          /* 桌面端：保持9:16比例 */
+          @media (min-width: 769px) {
+            .game-container {
+              width: auto;
+              height: 100%;
+              aspect-ratio: 9 / 16;
+              max-height: 100vh;
+            }
+          }
+          
           iframe { 
             position: absolute; 
             top: 0; 
@@ -814,6 +855,7 @@ app.get('/api/game-proxy', async (c) => {
             border: 0; 
             display: block;
           }
+          
           .loader {
             position: absolute;
             top: 50%;
@@ -837,25 +879,50 @@ app.get('/api/game-proxy', async (c) => {
           @keyframes spin {
             to { transform: rotate(360deg); }
           }
+          
+          .error-msg {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-family: system-ui, -apple-system, sans-serif;
+            text-align: center;
+            z-index: 9998;
+            display: none;
+            padding: 20px;
+            background: rgba(0,0,0,0.8);
+            border-radius: 8px;
+            max-width: 80%;
+          }
+          .error-msg.show { display: block; }
         </style>
       </head>
       <body>
-        <div class="loader" id="loader">
-          <div class="spinner"></div>
-          <p>游戏加载中...</p>
+        <div class="game-container">
+          <div class="loader" id="loader">
+            <div class="spinner"></div>
+            <p>游戏加载中...</p>
+          </div>
+          <div class="error-msg" id="errorMsg">
+            <h3>⚠️ 加载失败</h3>
+            <p style="margin-top: 10px; font-size: 14px;">该游戏可能不支持iframe嵌入</p>
+            <p style="margin-top: 5px; font-size: 12px; opacity: 0.7;">请联系管理员检查游戏链接</p>
+          </div>
+          <iframe 
+            id="gameFrame"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+            allowfullscreen
+            sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-pointer-lock allow-top-navigation allow-top-navigation-by-user-activation"
+          ></iframe>
         </div>
-        <iframe 
-          id="gameFrame"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-          allowfullscreen
-          sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-pointer-lock allow-top-navigation"
-        ></iframe>
         <script>
           // 🔐 动态设置iframe src，进一步混淆
           (function() {
             const gameUrl = ${JSON.stringify(gameUrl)};
             const frame = document.getElementById('gameFrame');
             const loader = document.getElementById('loader');
+            const errorMsg = document.getElementById('errorMsg');
             
             // 延迟设置src，让加载动画先显示
             setTimeout(() => {
@@ -864,16 +931,33 @@ app.get('/api/game-proxy', async (c) => {
               // 监听iframe加载完成
               frame.onload = function() {
                 loader.classList.add('hidden');
+                console.log('✅ 游戏加载成功');
               };
               
-              // 10秒后如果还没加载完，也隐藏加载器
-              setTimeout(() => {
+              // 监听iframe加载错误
+              frame.onerror = function() {
                 loader.classList.add('hidden');
-              }, 10000);
+                errorMsg.classList.add('show');
+                console.error('❌ 游戏加载失败:', gameUrl);
+              };
+              
+              // 15秒后如果还没加载完，显示错误信息
+              setTimeout(() => {
+                if (!loader.classList.contains('hidden')) {
+                  loader.classList.add('hidden');
+                  errorMsg.classList.add('show');
+                  console.warn('⚠️ 游戏加载超时');
+                }
+              }, 15000);
             }, 500);
             
             // 防止右键查看源代码
             document.addEventListener('contextmenu', e => e.preventDefault());
+            
+            // 检测iframe是否被X-Frame-Options阻止
+            window.addEventListener('message', function(e) {
+              console.log('📨 收到消息:', e);
+            });
           })();
         </script>
       </body>
