@@ -39,10 +39,16 @@
   - 错误处理
 
 ### 🎮 功能模块
-- [LANDING_PAGE_GUIDE.md](./LANDING_PAGE_GUIDE.md) - **Landing Page 配置指南** 🆕
+- [LANDING_PAGE_GUIDE.md](./LANDING_PAGE_GUIDE.md) - **Landing Page 配置指南**
   - 完整配置教程
   - 常见问题解答
   - 调试指南
+
+- [USER_REGISTRATION_TROUBLESHOOTING.md](./USER_REGISTRATION_TROUBLESHOOTING.md) - **用户注册问题排查** 🆕
+  - 邮箱验证邮件问题
+  - Supabase SMTP 配置
+  - Turso 数据同步
+  - 完整解决方案
 
 - [PREDICTION_DASHBOARD_GUIDE.md](./PREDICTION_DASHBOARD_GUIDE.md) - 预测仪表板指南
   - 预测算法
@@ -102,6 +108,7 @@
 | SECURITY_AND_OPTIMIZATION_REPORT.md | - | ✅ 完整 | - |
 | PERFORMANCE_OPTIMIZATION_GUIDE.md | - | ✅ 完整 | - |
 | LANDING_PAGE_GUIDE.md | v1.0.0 | ✅ 最新 | 2025-10-07 |
+| USER_REGISTRATION_TROUBLESHOOTING.md | v1.0.0 | ✅ 最新 | 2025-10-07 |
 | PREDICTION_DASHBOARD_GUIDE.md | - | ✅ 完整 | - |
 | POINTS_SYNC_FIX.md | - | ✅ 完整 | - |
 | RATE_LIMITING_AUDIT_ERROR_UPGRADE_GUIDE.md | - | ✅ 完整 | - |
@@ -127,6 +134,11 @@
 1. 阅读 [LANDING_PAGE_GUIDE.md](./LANDING_PAGE_GUIDE.md) 配置指南
 2. 按步骤在后台创建内容项
 3. 查看常见问题解答
+
+### 📧 用户注册问题？
+1. 阅读 [USER_REGISTRATION_TROUBLESHOOTING.md](./USER_REGISTRATION_TROUBLESHOOTING.md)
+2. 配置 Supabase SMTP
+3. 运行用户同步脚本
 
 ### 🔒 安全相关？
 1. 阅读 [SECURITY_AND_OPTIMIZATION_REPORT.md](./SECURITY_AND_OPTIMIZATION_REPORT.md)
@@ -231,9 +243,9 @@ ls TechDocs/ | grep PERFORMANCE
 
 ## 📊 文档统计
 
-- **总文档数**: 10 个 📈
+- **总文档数**: 11 个 📈
 - **性能优化**: 2 个
-- **功能指南**: 4 个 🆕
+- **功能指南**: 5 个 🆕
 - **安全相关**: 2 个
 - **开发规范**: 1 个
 - **项目文档**: 1 个
