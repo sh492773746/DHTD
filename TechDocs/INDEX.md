@@ -50,6 +50,12 @@
   - Turso 数据同步
   - 完整解决方案
 
+- [SUPABASE_EMAIL_REDIRECT_FIX.md](./SUPABASE_EMAIL_REDIRECT_FIX.md) - **邮箱验证跳转修复** 🆕
+  - 验证链接不跳转问题
+  - Site URL 配置
+  - Redirect URLs 配置
+  - 完整测试流程
+
 - [USER_DATA_STORAGE.md](./USER_DATA_STORAGE.md) - **用户数据存储架构**
   - 数据存储位置说明
   - Supabase vs Turso
