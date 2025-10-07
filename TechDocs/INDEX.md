@@ -50,10 +50,16 @@
   - Turso 数据同步
   - 完整解决方案
 
-- [SUPABASE_EMAIL_REDIRECT_FIX.md](./SUPABASE_EMAIL_REDIRECT_FIX.md) - **邮箱验证跳转修复** 🆕
+- [SUPABASE_EMAIL_REDIRECT_FIX.md](./SUPABASE_EMAIL_REDIRECT_FIX.md) - **邮箱验证跳转修复**
   - 验证链接不跳转问题
   - Site URL 配置
   - Redirect URLs 配置
+  - 完整测试流程
+
+- [MULTI_DOMAIN_EMAIL_SETUP.md](./MULTI_DOMAIN_EMAIL_SETUP.md) - **多域名邮箱验证配置** 🆕
+  - 支持多个域名 (tv28.cc, dahai.ws, dhtd.vercel.app)
+  - 分站自动认证
+  - 动态重定向配置
   - 完整测试流程
 
 - [USER_DATA_STORAGE.md](./USER_DATA_STORAGE.md) - **用户数据存储架构**

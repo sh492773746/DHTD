@@ -305,7 +305,20 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const signUp = useCallback(async (email, password, options) => {
-    const { data, error } = await fetchWithRetry(() => supabaseClient.auth.signUp({ email, password, options: { ...options, data: { hostname: window.location.hostname } }}));
+    // 动态设置重定向 URL，支持多个域名和分站
+    const redirectUrl = `${window.location.origin}/auth/callback`;
+    
+    const { data, error } = await fetchWithRetry(() => supabaseClient.auth.signUp({ 
+      email, 
+      password, 
+      options: { 
+        ...options, 
+        emailRedirectTo: redirectUrl,  // 动态重定向到当前域名
+        data: { 
+          hostname: window.location.hostname 
+        } 
+      }
+    }));
     if (error) {
       const humanError = getHumanReadableError(error);
       toast({ 
