@@ -260,8 +260,8 @@ export default defineConfig({
 					'react-vendor': ['react', 'react-dom', 'react-router-dom'],
 					// 将 UI 组件库分离
 					'ui-vendor': ['framer-motion', 'lucide-react'],
-					// 将大型库分离
-					'chart-vendor': ['recharts'],
+					// 将图表库分离
+					'chart-vendor': ['chart.js', 'react-chartjs-2'],
 					// 将查询和状态管理分离
 					'data-vendor': ['@tanstack/react-query', '@supabase/supabase-js'],
 				},
