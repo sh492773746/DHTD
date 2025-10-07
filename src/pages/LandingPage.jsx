@@ -135,8 +135,20 @@ const LandingPage = () => {
   const { data: ctaButtons } = usePageContent('landing', 'landing_cta');
   const { data: stats } = usePageContent('landing', 'landing_stats');
 
-  const hero = heroData[0] || {};
-  const primaryCTA = ctaButtons[0] || {};
+  // 从数据中提取内容，使用可选链和空值合并
+  const hero = heroData && heroData.length > 0 ? heroData[0] : {};
+  const primaryCTA = ctaButtons && ctaButtons.length > 0 ? ctaButtons[0] : {};
+
+  // 调试日志（开发环境）
+  if (import.meta.env.DEV) {
+    console.log('Landing Page Data:', {
+      heroData,
+      hero,
+      features,
+      ctaButtons,
+      stats
+    });
+  }
 
   // 检测微信/QQ浏览器
   useEffect(() => {
