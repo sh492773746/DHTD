@@ -132,26 +132,27 @@ const PageContentManager = () => {
         enabled: isInitialized && !!managedTenantId && managedTenantId !== 0,
     });
 
-    const invalidateContentQueries = useCallback(() => {
+    const invalidateContentQueries = useCallback(async () => {
         // 刷新后台管理页面的缓存
-        queryClient.invalidateQueries({ queryKey: ['pageContent', managedTenantId, activePage, sectionsKey, !!token] });
-        queryClient.invalidateQueries({ queryKey: ['dashboardContent', managedTenantId] });
-        queryClient.invalidateQueries({ queryKey: ['gamesData', managedTenantId] });
-        // 刷新游戏分类（当分类更新时，卡片的下拉选项需要同步更新）
-        queryClient.invalidateQueries({ queryKey: ['gameCategories', managedTenantId] });
-        // ensure social pinned ads refresh on Social page
-        queryClient.invalidateQueries({ queryKey: ['pageContent', 'social', 'pinned_ads'] });
-        
-        // 🔥 关键修复：刷新前台页面的缓存
-        // 前台页面使用 ['pageContent', page, section] 格式
-        // 使用 queryKey 前缀匹配来刷新所有相关的前台页面缓存
-        queryClient.invalidateQueries({ 
-            predicate: (query) => {
-                // 匹配所有以 'pageContent' 开头的查询
-                // 这会刷新前台的 ['pageContent', 'home', 'carousel'] 等缓存
-                return query.queryKey[0] === 'pageContent';
-            }
-        });
+        await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['pageContent', managedTenantId, activePage, sectionsKey, !!token] }),
+            queryClient.invalidateQueries({ queryKey: ['dashboardContent', managedTenantId] }),
+            queryClient.invalidateQueries({ queryKey: ['gamesData', managedTenantId] }),
+            // 刷新游戏分类（当分类更新时，卡片的下拉选项需要同步更新）
+            queryClient.invalidateQueries({ queryKey: ['gameCategories', managedTenantId] }),
+            // ensure social pinned ads refresh on Social page
+            queryClient.invalidateQueries({ queryKey: ['pageContent', 'social', 'pinned_ads'] }),
+            // 🔥 关键修复：刷新前台页面的缓存
+            // 前台页面使用 ['pageContent', page, section] 格式
+            // 使用 queryKey 前缀匹配来刷新所有相关的前台页面缓存
+            queryClient.invalidateQueries({ 
+                predicate: (query) => {
+                    // 匹配所有以 'pageContent' 开头的查询
+                    // 这会刷新前台的 ['pageContent', 'home', 'carousel'] 等缓存
+                    return query.queryKey[0] === 'pageContent';
+                }
+            })
+        ]);
     }, [queryClient, managedTenantId, activePage, sectionsKey, token]);
 
     const handleFormSubmit = async (values, itemId) => {
@@ -176,7 +177,7 @@ const PageContentManager = () => {
             toast({ title: '保存成功', description: '内容已更新' });
             setIsFormOpen(false);
             setEditingItem(null);
-            invalidateContentQueries();
+            await invalidateContentQueries();
         } catch (e) {
             toast({ title: '保存失败', description: e.message, variant: 'destructive' });
         } finally {
@@ -188,7 +189,7 @@ const PageContentManager = () => {
         try {
             await bffJson(`/api/admin/page-content/${id}?tenantId=${managedTenantId}`, { token, method: 'DELETE' });
             toast({ title: '删除成功' });
-            invalidateContentQueries();
+            await invalidateContentQueries();
         } catch (e) {
             toast({ title: '删除失败', description: e.message, variant: 'destructive' });
         }
@@ -216,7 +217,7 @@ const PageContentManager = () => {
                 await bffJson('/api/admin/page-content', { token, method: 'POST', body });
             }
             toast({ title: '批量导入成功', description: `${importedData.length}个项目已添加。` });
-            invalidateContentQueries();
+            await invalidateContentQueries();
         } catch (e) {
             toast({ title: '批量导入失败', description: e.message, variant: 'destructive' });
         } finally {
@@ -284,7 +285,7 @@ const PageContentManager = () => {
                 title: '去重成功', 
                 description: `已删除 ${duplicates.length} 个重复的游戏卡片` 
             });
-            invalidateContentQueries();
+            await invalidateContentQueries();
         } catch (e) {
             toast({ title: '去重失败', description: e.message, variant: 'destructive' });
         } finally {
@@ -298,45 +299,94 @@ const PageContentManager = () => {
             return;
         }
 
-        if (!confirm(`确定要将 ${itemIds.length} 个游戏卡片的分类修改为 "${categoryOptions.find(c => c.value === categorySlug)?.label}"？`)) {
+        const categoryName = categoryOptions.find(c => c.value === categorySlug)?.label;
+        if (!confirm(`确定要将 ${itemIds.length} 个游戏卡片的分类修改为 "${categoryName}"？`)) {
             return;
         }
 
         setIsSubmitting(true);
+        let successCount = 0;
+        let failCount = 0;
+
         try {
             // 批量更新每个项目的分类
             for (const itemId of itemIds) {
                 const item = pageContent?.['game_cards']?.find(i => i.id === itemId);
-                if (!item) continue;
+                if (!item) {
+                    console.warn(`⚠️ 未找到 ID=${itemId} 的项目`);
+                    failCount++;
+                    continue;
+                }
+
+                // 确保content是对象而不是字符串
+                let currentContent;
+                try {
+                    currentContent = typeof item.content === 'string' 
+                        ? JSON.parse(item.content) 
+                        : item.content;
+                } catch (e) {
+                    console.error(`❌ 解析内容失败 ID=${itemId}:`, e);
+                    currentContent = item.content;
+                }
 
                 const updatedContent = {
-                    ...item.content,
+                    ...currentContent,
                     category: categorySlug
                 };
 
-                // 使用和单个编辑相同的请求格式
-                await bffJson(`/api/admin/page-content/${itemId}`, {
-                    token,
-                    method: 'PUT',
-                    body: {
-                        page: item.page,
-                        section: item.section,
-                        content: updatedContent,
-                        position: item.position,
-                        tenant_id: managedTenantId,
-                        id: itemId
-                    }
+                console.log(`🔄 更新游戏卡片 ID=${itemId}:`, {
+                    oldCategory: currentContent.category,
+                    newCategory: categorySlug,
+                    title: currentContent.title
                 });
+
+                try {
+                    // 使用和单个编辑相同的请求格式
+                    await bffJson(`/api/admin/page-content/${itemId}`, {
+                        token,
+                        method: 'PUT',
+                        body: {
+                            page: item.page,
+                            section: item.section,
+                            content: updatedContent,
+                            position: item.position,
+                            tenant_id: managedTenantId,
+                            id: itemId
+                        }
+                    });
+                    
+                    successCount++;
+                    console.log(`✅ ID=${itemId} 更新成功`, {
+                        title: currentContent.title,
+                        newCategory: categorySlug
+                    });
+                } catch (error) {
+                    failCount++;
+                    console.error(`❌ ID=${itemId} 请求失败:`, error.message);
+                }
             }
 
-            toast({ 
-                title: '批量更新成功', 
-                description: `已更新 ${itemIds.length} 个游戏卡片的分类` 
-            });
-            invalidateContentQueries();
+            if (successCount > 0) {
+                // 先刷新缓存
+                await invalidateContentQueries();
+                
+                // 等待一下让缓存刷新完成
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                toast({ 
+                    title: '批量更新完成', 
+                    description: `成功：${successCount}，失败：${failCount}。请刷新页面查看最新数据。` 
+                });
+            } else {
+                toast({ 
+                    title: '批量更新失败', 
+                    description: '所有项目都更新失败，请查看控制台日志',
+                    variant: 'destructive' 
+                });
+            }
         } catch (e) {
-            console.error('批量更新错误:', e);
-            toast({ title: '批量更新失败', description: e.message, variant: 'destructive' });
+            console.error('❌ 批量更新异常:', e);
+            toast({ title: '批量更新异常', description: e.message, variant: 'destructive' });
         } finally {
             setIsSubmitting(false);
         }
