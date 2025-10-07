@@ -2244,6 +2244,207 @@ app.put('/api/admin/users/:id/stats', async (c) => {
   }
 });
 
+// Verify user data consistency between Supabase and Turso
+app.post('/api/admin/users/:id/verify', async (c) => {
+  try {
+    const actorId = c.get('userId');
+    if (!actorId) return c.json({ error: 'unauthorized' }, 401);
+    
+    const isActorSuper = await isSuperAdminUser(actorId);
+    if (!isActorSuper) return c.json({ error: 'forbidden' }, 403);
+    
+    const targetUserId = c.req.param('id');
+    if (!targetUserId) return c.json({ error: 'invalid' }, 400);
+    
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    
+    const result = {
+      userId: targetUserId,
+      supabase: null,
+      turso: null,
+      consistent: false,
+      issues: [],
+    };
+    
+    // Check Supabase
+    if (supabaseUrl && serviceRoleKey) {
+      try {
+        const response = await fetch(
+          `${supabaseUrl}/auth/v1/admin/users/${targetUserId}`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${serviceRoleKey}`,
+              'apikey': serviceRoleKey,
+            },
+          }
+        );
+        
+        if (response.ok) {
+          const userData = await response.json();
+          result.supabase = {
+            exists: true,
+            email: userData.email,
+            email_confirmed_at: userData.email_confirmed_at,
+            created_at: userData.created_at,
+            last_sign_in_at: userData.last_sign_in_at,
+          };
+        } else {
+          result.supabase = { exists: false };
+          result.issues.push('Supabase 中不存在此用户');
+        }
+      } catch (e) {
+        result.issues.push(`Supabase 查询失败: ${e.message}`);
+      }
+    } else {
+      result.issues.push('Supabase 凭证缺失');
+    }
+    
+    // Check Turso
+    try {
+      const gdb = getGlobalDb();
+      const profileRows = await gdb.select().from(profiles).where(eq(profiles.id, targetUserId)).limit(1);
+      
+      if (profileRows && profileRows.length > 0) {
+        const profile = profileRows[0];
+        result.turso = {
+          exists: true,
+          username: profile.username,
+          points: profile.points || 0,
+          virtual_currency: profile.virtualCurrency || 0,
+          created_at: profile.createdAt || profile.created_at,
+        };
+      } else {
+        result.turso = { exists: false };
+        result.issues.push('Turso 中不存在此用户 profile');
+      }
+    } catch (e) {
+      result.issues.push(`Turso 查询失败: ${e.message}`);
+    }
+    
+    // Check consistency
+    if (result.supabase?.exists && result.turso?.exists) {
+      result.consistent = true;
+      result.message = '数据一致：用户在 Supabase 和 Turso 都存在';
+    } else if (!result.supabase?.exists && result.turso?.exists) {
+      result.consistent = false;
+      result.message = '数据不一致：Supabase 已删除但 Turso 仍有数据（孤立 profile）';
+      result.recommendation = '建议删除 Turso 中的孤立 profile';
+    } else if (result.supabase?.exists && !result.turso?.exists) {
+      result.consistent = false;
+      result.message = '数据不一致：Supabase 存在但 Turso 无 profile';
+      result.recommendation = '用户可能尚未登录，首次登录时会自动创建 profile';
+    } else {
+      result.consistent = true;
+      result.message = '数据一致：用户在两边都不存在';
+    }
+    
+    return c.json(result);
+    
+  } catch (e) {
+    console.error('POST /api/admin/users/:id/verify error', e);
+    return c.json({ error: 'failed', message: e.message }, 500);
+  }
+});
+
+// Clean orphaned profiles (exists in Turso but not in Supabase)
+app.post('/api/admin/users/cleanup-orphaned', async (c) => {
+  try {
+    const actorId = c.get('userId');
+    if (!actorId) return c.json({ error: 'unauthorized' }, 401);
+    
+    const isActorSuper = await isSuperAdminUser(actorId);
+    if (!isActorSuper) return c.json({ error: 'forbidden' }, 403);
+    
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    
+    if (!supabaseUrl || !serviceRoleKey) {
+      return c.json({ error: 'supabase-credentials-missing' }, 500);
+    }
+    
+    const gdb = getGlobalDb();
+    const allProfiles = await gdb.select().from(profiles);
+    
+    const orphanedProfiles = [];
+    const validProfiles = [];
+    
+    // Check each profile against Supabase
+    for (const profile of allProfiles) {
+      try {
+        const response = await fetch(
+          `${supabaseUrl}/auth/v1/admin/users/${profile.id}`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${serviceRoleKey}`,
+              'apikey': serviceRoleKey,
+            },
+          }
+        );
+        
+        if (response.ok) {
+          validProfiles.push(profile.id);
+        } else if (response.status === 404) {
+          orphanedProfiles.push({
+            id: profile.id,
+            username: profile.username,
+            created_at: profile.createdAt || profile.created_at,
+          });
+        }
+      } catch (e) {
+        console.error(`Error checking user ${profile.id}:`, e);
+      }
+    }
+    
+    // Optionally delete orphaned profiles
+    const shouldDelete = c.req.query('delete') === 'true';
+    let deletedCount = 0;
+    
+    if (shouldDelete && orphanedProfiles.length > 0) {
+      for (const orphan of orphanedProfiles) {
+        try {
+          // Delete invitations
+          await gdb.delete(invitations).where(eq(invitations.inviterId, orphan.id));
+          await gdb.delete(invitations).where(eq(invitations.inviteeId, orphan.id));
+          
+          // Delete comments
+          await gdb.delete(commentsTable).where(eq(commentsTable.userId, orphan.id));
+          
+          // Delete posts
+          await gdb.delete(postsTable).where(eq(postsTable.userId, orphan.id));
+          
+          // Delete admin roles
+          await gdb.delete(adminUsersTable).where(eq(adminUsersTable.userId, orphan.id));
+          await gdb.delete(tenantAdminsTable).where(eq(tenantAdminsTable.userId, orphan.id));
+          
+          // Delete profile
+          await gdb.delete(profiles).where(eq(profiles.id, orphan.id));
+          
+          deletedCount++;
+        } catch (e) {
+          console.error(`Failed to delete orphaned profile ${orphan.id}:`, e);
+        }
+      }
+    }
+    
+    return c.json({
+      ok: true,
+      total_profiles: allProfiles.length,
+      valid_profiles: validProfiles.length,
+      orphaned_profiles: orphanedProfiles.length,
+      orphaned_list: orphanedProfiles,
+      deleted_count: deletedCount,
+      action_taken: shouldDelete ? 'deleted' : 'none (use ?delete=true to remove)',
+    });
+    
+  } catch (e) {
+    console.error('POST /api/admin/users/cleanup-orphaned error', e);
+    return c.json({ error: 'failed', message: e.message }, 500);
+  }
+});
+
 // Delete user (cascade delete from both Supabase and Turso)
 app.delete('/api/admin/users/:id', async (c) => {
   try {
