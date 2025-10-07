@@ -145,7 +145,11 @@ const ContentSection = ({
         }
 
         if (filterCategory === 'uncategorized') {
-            return sectionContent.filter(item => !item.content?.category_slug);
+            return sectionContent.filter(item => {
+                const categorySlug = item.content?.category_slug;
+                // 未归类：没有 category_slug 或者是空字符串
+                return !categorySlug || categorySlug.trim() === '';
+            });
         }
 
         return sectionContent.filter(item => item.content?.category_slug === filterCategory);
@@ -167,7 +171,8 @@ const ContentSection = ({
 
         sectionContent.forEach(item => {
             const catSlug = item.content?.category_slug;
-            if (!catSlug) {
+            // 未归类：没有 category_slug 或者是空字符串
+            if (!catSlug || catSlug.trim() === '') {
                 stats.uncategorized++;
             } else {
                 stats[catSlug] = (stats[catSlug] || 0) + 1;
