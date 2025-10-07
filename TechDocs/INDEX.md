@@ -50,11 +50,18 @@
   - Turso 数据同步
   - 完整解决方案
 
-- [USER_DATA_STORAGE.md](./USER_DATA_STORAGE.md) - **用户数据存储架构** 🆕
+- [USER_DATA_STORAGE.md](./USER_DATA_STORAGE.md) - **用户数据存储架构**
   - 数据存储位置说明
   - Supabase vs Turso
   - 完整数据结构
   - 查看和管理方法
+
+- [USER_CASCADE_DELETE_GUIDE.md](./USER_CASCADE_DELETE_GUIDE.md) - **用户级联删除实现** 🆕
+  - 删除 Supabase 自动删除 Turso
+  - 3种实现方案对比
+  - API 级联删除（推荐）
+  - Database Webhook 方案
+  - 测试和验证
 
 - [PREDICTION_DASHBOARD_GUIDE.md](./PREDICTION_DASHBOARD_GUIDE.md) - 预测仪表板指南
   - 预测算法
@@ -116,6 +123,7 @@
 | LANDING_PAGE_GUIDE.md | v1.0.0 | ✅ 最新 | 2025-10-07 |
 | USER_REGISTRATION_TROUBLESHOOTING.md | v1.0.0 | ✅ 最新 | 2025-10-07 |
 | USER_DATA_STORAGE.md | v1.0.0 | ✅ 最新 | 2025-10-07 |
+| USER_CASCADE_DELETE_GUIDE.md | v1.0.0 | ✅ 最新 | 2025-10-07 |
 | PREDICTION_DASHBOARD_GUIDE.md | - | ✅ 完整 | - |
 | POINTS_SYNC_FIX.md | - | ✅ 完整 | - |
 | RATE_LIMITING_AUDIT_ERROR_UPGRADE_GUIDE.md | - | ✅ 完整 | - |
@@ -151,6 +159,11 @@
 1. 查看 [USER_DATA_STORAGE.md](./USER_DATA_STORAGE.md) 了解存储架构
 2. Supabase: 认证数据
 3. Turso: 业务数据
+
+### 🗑️ 如何删除用户？
+1. 阅读 [USER_CASCADE_DELETE_GUIDE.md](./USER_CASCADE_DELETE_GUIDE.md)
+2. 使用 API 级联删除（推荐）
+3. 或配置 Database Webhook
 
 ### 🔒 安全相关？
 1. 阅读 [SECURITY_AND_OPTIMIZATION_REPORT.md](./SECURITY_AND_OPTIMIZATION_REPORT.md)
@@ -255,9 +268,9 @@ ls TechDocs/ | grep PERFORMANCE
 
 ## 📊 文档统计
 
-- **总文档数**: 12 个 📈
+- **总文档数**: 13 个 📈
 - **性能优化**: 2 个
-- **功能指南**: 6 个 🆕
+- **功能指南**: 7 个 🆕
 - **安全相关**: 2 个
 - **开发规范**: 1 个
 - **项目文档**: 1 个

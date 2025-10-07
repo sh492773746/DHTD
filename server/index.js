@@ -2244,6 +2244,148 @@ app.put('/api/admin/users/:id/stats', async (c) => {
   }
 });
 
+// Delete user (cascade delete from both Supabase and Turso)
+app.delete('/api/admin/users/:id', async (c) => {
+  try {
+    const actorId = c.get('userId');
+    if (!actorId) return c.json({ error: 'unauthorized' }, 401);
+    
+    // Only super admin can delete users
+    const isActorSuper = await isSuperAdminUser(actorId);
+    if (!isActorSuper) return c.json({ error: 'forbidden' }, 403);
+    
+    const targetUserId = c.req.param('id');
+    if (!targetUserId) return c.json({ error: 'invalid' }, 400);
+    
+    // Prevent self-deletion
+    if (targetUserId === actorId) {
+      return c.json({ error: 'cannot-delete-self' }, 400);
+    }
+    
+    const gdb = getGlobalDb();
+    const deletedData = {
+      profiles: 0,
+      posts: 0,
+      comments: 0,
+      invitations: 0,
+      admin_roles: 0,
+      errors: [],
+    };
+    
+    // === Step 1: Delete Turso data ===
+    
+    // 1.1 Delete admin roles
+    try {
+      await gdb.delete(adminUsersTable).where(eq(adminUsersTable.userId, targetUserId));
+      deletedData.admin_roles++;
+    } catch (e) {
+      console.error('Failed to delete admin_users:', e);
+      deletedData.errors.push('admin_users: ' + e.message);
+    }
+    
+    try {
+      await gdb.delete(tenantAdminsTable).where(eq(tenantAdminsTable.userId, targetUserId));
+      deletedData.admin_roles++;
+    } catch (e) {
+      console.error('Failed to delete tenant_admins:', e);
+      deletedData.errors.push('tenant_admins: ' + e.message);
+    }
+    
+    // 1.2 Delete invitations (as inviter or invitee)
+    try {
+      await gdb.delete(invitations).where(eq(invitations.inviterId, targetUserId));
+      await gdb.delete(invitations).where(eq(invitations.inviteeId, targetUserId));
+      deletedData.invitations++;
+    } catch (e) {
+      console.error('Failed to delete invitations:', e);
+      deletedData.errors.push('invitations: ' + e.message);
+    }
+    
+    // 1.3 Delete comments
+    try {
+      await gdb.delete(commentsTable).where(eq(commentsTable.userId, targetUserId));
+      deletedData.comments++;
+    } catch (e) {
+      console.error('Failed to delete comments:', e);
+      deletedData.errors.push('comments: ' + e.message);
+    }
+    
+    // 1.4 Delete posts
+    try {
+      await gdb.delete(postsTable).where(eq(postsTable.userId, targetUserId));
+      deletedData.posts++;
+    } catch (e) {
+      console.error('Failed to delete posts:', e);
+      deletedData.errors.push('posts: ' + e.message);
+    }
+    
+    // 1.5 Delete profile (last, as other tables may reference it)
+    try {
+      await gdb.delete(profiles).where(eq(profiles.id, targetUserId));
+      deletedData.profiles = 1;
+    } catch (e) {
+      console.error('Failed to delete profile:', e);
+      deletedData.errors.push('profiles: ' + e.message);
+    }
+    
+    // === Step 2: Delete Supabase user ===
+    
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    
+    let supabaseDeleteSuccess = false;
+    
+    if (supabaseUrl && serviceRoleKey) {
+      try {
+        const response = await fetch(
+          `${supabaseUrl}/auth/v1/admin/users/${targetUserId}`,
+          {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${serviceRoleKey}`,
+              'apikey': serviceRoleKey,
+            },
+          }
+        );
+        
+        if (response.ok) {
+          supabaseDeleteSuccess = true;
+        } else {
+          const errorText = await response.text();
+          console.error('Supabase delete failed:', errorText);
+          deletedData.errors.push('supabase: ' + errorText);
+        }
+      } catch (e) {
+        console.error('Supabase delete error:', e);
+        deletedData.errors.push('supabase: ' + e.message);
+      }
+    } else {
+      deletedData.errors.push('supabase: Missing credentials');
+    }
+    
+    // Return result
+    if (!supabaseDeleteSuccess) {
+      return c.json({
+        ok: false,
+        error: 'supabase-delete-failed',
+        message: 'Turso 数据已删除，但 Supabase 用户删除失败',
+        deletedData
+      }, 500);
+    }
+    
+    return c.json({
+      ok: true,
+      message: '用户已完全删除',
+      deletedData,
+      userId: targetUserId
+    });
+    
+  } catch (e) {
+    console.error('DELETE /api/admin/users/:id error', e);
+    return c.json({ error: 'failed', message: e.message }, 500);
+  }
+});
+
 app.get('/api/admin/posts', async (c) => {
   try {
     const defaultDb = await getTursoClientForTenant(0);
