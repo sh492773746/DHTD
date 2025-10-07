@@ -789,13 +789,42 @@ app.get('/api/game-proxy', async (c) => {
       `);
     }
     
-    const gameUrl = data.url;
-    
-    console.log('🎮 Game proxy access:', { 
-      gameId: data.gid, 
-      gameUrl: gameUrl,  // 显示完整URL用于调试
-      urlLength: gameUrl.length 
-    });
+    let gameUrl;
+    try {
+      gameUrl = data.url;
+      
+      if (!gameUrl || typeof gameUrl !== 'string') {
+        throw new Error('Invalid game URL');
+      }
+      
+      console.log('🎮 Game proxy access:', { 
+        gameId: data.gid, 
+        gameUrl: gameUrl,  // 显示完整URL用于调试
+        urlLength: gameUrl.length 
+      });
+    } catch (urlError) {
+      console.error('❌ URL validation error:', urlError);
+      return c.html(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>加载失败</title>
+          <style>
+            body { margin: 0; padding: 20px; font-family: system-ui; background: #000; color: #fff; display: flex; align-items: center; justify-content: center; height: 100vh; }
+            .error { text-align: center; }
+          </style>
+        </head>
+        <body>
+          <div class="error">
+            <h1>⚠️</h1>
+            <p>游戏URL无效</p>
+            <p style="font-size: 12px; opacity: 0.5; margin-top: 10px;">${urlError.message}</p>
+          </div>
+        </body>
+        </html>
+      `);
+    }
     
     // 返回一个HTML页面，使用iframe嵌入游戏
     // 关键：真实URL只在这个HTML中，用户在开发者工具中看到的iframe src是/api/game-proxy
@@ -912,43 +941,53 @@ app.get('/api/game-proxy', async (c) => {
           <iframe 
             id="gameFrame"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-            allowfullscreen
             sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-pointer-lock allow-top-navigation allow-top-navigation-by-user-activation"
           ></iframe>
         </div>
         <script>
           // 🔐 动态设置iframe src，进一步混淆
           (function() {
-            const gameUrl = ${JSON.stringify(gameUrl)};
+            // 使用Base64编码避免特殊字符问题
+            const gameUrlBase64 = '${Buffer.from(gameUrl).toString('base64')}';
+            const gameUrl = atob(gameUrlBase64);
+            
             const frame = document.getElementById('gameFrame');
             const loader = document.getElementById('loader');
             const errorMsg = document.getElementById('errorMsg');
             
+            console.log('🎮 正在加载游戏:', gameUrl.substring(0, 50) + '...');
+            
             // 延迟设置src，让加载动画先显示
             setTimeout(() => {
-              frame.src = gameUrl;
+              try {
+                frame.src = gameUrl;
               
-              // 监听iframe加载完成
-              frame.onload = function() {
-                loader.classList.add('hidden');
-                console.log('✅ 游戏加载成功');
-              };
-              
-              // 监听iframe加载错误
-              frame.onerror = function() {
-                loader.classList.add('hidden');
-                errorMsg.classList.add('show');
-                console.error('❌ 游戏加载失败:', gameUrl);
-              };
-              
-              // 15秒后如果还没加载完，显示错误信息
-              setTimeout(() => {
-                if (!loader.classList.contains('hidden')) {
+                // 监听iframe加载完成
+                frame.onload = function() {
+                  loader.classList.add('hidden');
+                  console.log('✅ 游戏加载成功');
+                };
+                
+                // 监听iframe加载错误
+                frame.onerror = function(e) {
                   loader.classList.add('hidden');
                   errorMsg.classList.add('show');
-                  console.warn('⚠️ 游戏加载超时');
-                }
-              }, 15000);
+                  console.error('❌ 游戏加载失败:', e);
+                };
+                
+                // 15秒后如果还没加载完，显示错误信息
+                setTimeout(() => {
+                  if (!loader.classList.contains('hidden')) {
+                    loader.classList.add('hidden');
+                    errorMsg.classList.add('show');
+                    console.warn('⚠️ 游戏加载超时');
+                  }
+                }, 15000);
+              } catch (error) {
+                loader.classList.add('hidden');
+                errorMsg.classList.add('show');
+                console.error('❌ 设置iframe src失败:', error);
+              }
             }, 500);
             
             // 防止右键查看源代码

@@ -166,7 +166,6 @@ const GamePlayer = () => {
             className="w-full h-full border-0"
             title="游戏"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-            allowFullScreen
             sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-pointer-lock allow-top-navigation"
           />
         </div>
