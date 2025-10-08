@@ -5294,6 +5294,56 @@ function logToCache(level, message, labels = []) {
 
 // ==================== 应用弹窗管理 API ====================
 
+// 用于跟踪已检查的租户（避免重复检查）
+const __popupsTableChecked = new Set();
+
+// 确保 app_popups 表存在
+async function ensureAppPopupsTable(db, tenantId) {
+  const key = `tenant_${tenantId}`;
+  
+  // 如果已经检查过这个租户，直接返回
+  if (__popupsTableChecked.has(key)) {
+    return;
+  }
+  
+  try {
+    // 检查表是否存在
+    const checkResult = await db.execute(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='app_popups'"
+    );
+    
+    if (checkResult.rows && checkResult.rows.length > 0) {
+      __popupsTableChecked.add(key);
+      return; // 表已存在
+    }
+    
+    // 创建表
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS app_popups (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tenant_id INTEGER DEFAULT 0,
+        enabled INTEGER DEFAULT 0,
+        title TEXT,
+        content TEXT,
+        background_image TEXT,
+        button_text TEXT,
+        button_url TEXT,
+        "order" INTEGER DEFAULT 0,
+        created_at TEXT,
+        updated_at TEXT
+      )
+    `);
+    
+    console.log(`✅ Created app_popups table for tenant ${tenantId}`);
+    __popupsTableChecked.add(key);
+  } catch (e) {
+    console.error('Error ensuring app_popups table:', e);
+    // 即使失败也标记为已检查，避免无限重试
+    __popupsTableChecked.add(key);
+    throw e;
+  }
+}
+
 // 获取启用的弹窗列表（公开API）
 app.get('/api/popups', async (c) => {
   try {
@@ -5301,6 +5351,9 @@ app.get('/api/popups', async (c) => {
     const host = c.get('host').split(':')[0];
     const tenantId = await resolveTenantId(defaultDb, host);
     const db = await getTursoClientForTenant(tenantId);
+    
+    // 确保表存在
+    await ensureAppPopupsTable(db, tenantId);
     
     const popups = await db.select()
       .from(appPopups)
@@ -5336,6 +5389,9 @@ app.get('/api/admin/popups', async (c) => {
     const tenantId = await resolveTenantId(defaultDb, host);
     const db = await getTursoClientForTenant(tenantId);
     
+    // 确保表存在
+    await ensureAppPopupsTable(db, tenantId);
+    
     const popups = await db.select()
       .from(appPopups)
       .where(eq(appPopups.tenantId, tenantId))
@@ -5366,6 +5422,9 @@ app.post('/api/admin/popups', async (c) => {
     const host = c.get('host').split(':')[0];
     const tenantId = await resolveTenantId(defaultDb, host);
     const db = await getTursoClientForTenant(tenantId);
+    
+    // 确保表存在
+    await ensureAppPopupsTable(db, tenantId);
     
     const body = await c.req.json();
     const { title, content, backgroundImage, buttonText, buttonUrl, enabled, order } = body;
@@ -5410,6 +5469,9 @@ app.put('/api/admin/popups/:id', async (c) => {
     const tenantId = await resolveTenantId(defaultDb, host);
     const db = await getTursoClientForTenant(tenantId);
     const popupId = parseInt(c.req.param('id'));
+    
+    // 确保表存在
+    await ensureAppPopupsTable(db, tenantId);
     
     const body = await c.req.json();
     const { title, content, backgroundImage, buttonText, buttonUrl, enabled, order } = body;
@@ -5462,6 +5524,9 @@ app.delete('/api/admin/popups/:id', async (c) => {
     const tenantId = await resolveTenantId(defaultDb, host);
     const db = await getTursoClientForTenant(tenantId);
     const popupId = parseInt(c.req.param('id'));
+    
+    // 确保表存在
+    await ensureAppPopupsTable(db, tenantId);
     
     await db.delete(appPopups)
       .where(and(
