@@ -62,11 +62,17 @@
   - 动态重定向配置
   - 完整测试流程
 
-- [EMAIL_VERIFICATION_TIMEOUT_FIX.md](./EMAIL_VERIFICATION_TIMEOUT_FIX.md) - **邮箱验证超时修复** 🆕
+- [EMAIL_VERIFICATION_TIMEOUT_FIX.md](./EMAIL_VERIFICATION_TIMEOUT_FIX.md) - **邮箱验证超时修复**
   - "登录超时"问题解决
   - 主动处理认证 token
   - Session 生成流程
   - 调试指南
+
+- [APP_LOADING_DIAGNOSIS.md](./APP_LOADING_DIAGNOSIS.md) - **应用加载问题诊断** 🆕
+  - 应用卡在加载页面问题
+  - 超时保护机制
+  - 初始化流程优化
+  - 性能指标和建议
 
 - [USER_DATA_STORAGE.md](./USER_DATA_STORAGE.md) - **用户数据存储架构**
   - 数据存储位置说明
