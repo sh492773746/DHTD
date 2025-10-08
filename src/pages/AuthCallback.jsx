@@ -11,6 +11,8 @@ const AuthCallback = () => {
   const { session } = useAuth();
   const { toast } = useToast();
   const [processing, setProcessing] = useState(true);
+  const [authSuccess, setAuthSuccess] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
 
   useEffect(() => {
     const handleAuthCallback = async () => {
@@ -51,6 +53,10 @@ const AuthCallback = () => {
             console.log('✅ Session 交换成功！');
             console.log('👤 用户:', data.session.user.email);
             console.log('🆔 用户 ID:', data.session.user.id);
+            
+            // 保存用户信息并标记成功
+            setUserEmail(data.session.user.email);
+            setAuthSuccess(true);
             setProcessing(false);
             return;
           } else {
@@ -79,6 +85,10 @@ const AuthCallback = () => {
           if (data.session) {
             console.log('✅ Session 设置成功！');
             console.log('👤 用户:', data.session.user.email);
+            
+            // 保存用户信息并标记成功
+            setUserEmail(data.session.user.email);
+            setAuthSuccess(true);
             setProcessing(false);
             return;
           }
@@ -96,6 +106,8 @@ const AuthCallback = () => {
         
         if (currentSession) {
           console.log('✅ 当前已有 session:', currentSession.user.email);
+          setUserEmail(currentSession.user.email);
+          setAuthSuccess(true);
           setProcessing(false);
           return;
         }
@@ -139,12 +151,13 @@ const AuthCallback = () => {
     handleAuthCallback();
   }, [toast, navigate]);
 
+  // 认证成功后直接跳转，不依赖 AuthContext 的 session 更新
   useEffect(() => {
-    if (!processing && session) {
-      console.log('🎉 验证成功！Session 已获取:', session.user.email);
+    if (authSuccess && userEmail) {
+      console.log('🎉 认证成功！用户:', userEmail);
       toast({
         title: '🎉 邮箱验证成功！',
-        description: `欢迎回来，${session.user.email}!`,
+        description: `欢迎回来，${userEmail}!`,
         duration: 4000,
       });
       
@@ -154,25 +167,7 @@ const AuthCallback = () => {
         navigate('/');
       }, 1000);
     }
-  }, [processing, session, navigate, toast]);
-
-  useEffect(() => {
-    if (!processing && !session) {
-      console.warn('⚠️ Processing 完成但没有 session，等待8秒后超时');
-      const timeoutId = setTimeout(() => {
-        console.error('❌ 登录超时：8秒后仍未获取到 session');
-        toast({
-          variant: 'destructive',
-          title: '登录超时',
-          description: '未能获取您的会话信息，请重试。可能是 token 已过期或无效。',
-          duration: 6000,
-        });
-        navigate('/auth');
-      }, 8000); // 延长到 8 秒
-
-      return () => clearTimeout(timeoutId);
-    }
-  }, [processing, session, navigate, toast]);
+  }, [authSuccess, userEmail, navigate, toast]);
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4 bg-gradient-to-br from-blue-100 to-purple-100">
@@ -182,21 +177,28 @@ const AuthCallback = () => {
         transition={{ duration: 0.5, type: 'spring' }}
         className="flex flex-col items-center space-y-4"
       >
-        <div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-purple-500"></div>
-        <p className="text-lg font-semibold text-gray-700">正在安全地将您登录...</p>
-        <p className="text-sm text-gray-500">请稍候，我们正在验证您的会话。</p>
-        {processing && (
-          <p className="text-xs text-gray-400 mt-2">处理中...</p>
-        )}
-        {!processing && !session && (
-          <p className="text-xs text-yellow-600 mt-2">等待会话更新...</p>
+        {authSuccess ? (
+          <>
+            <div className="w-16 h-16 flex items-center justify-center rounded-full bg-green-500 text-white text-3xl">
+              ✓
+            </div>
+            <p className="text-lg font-semibold text-gray-700">验证成功！</p>
+            <p className="text-sm text-gray-500">即将跳转到首页...</p>
+          </>
+        ) : (
+          <>
+            <div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-purple-500"></div>
+            <p className="text-lg font-semibold text-gray-700">正在安全地将您登录...</p>
+            <p className="text-sm text-gray-500">请稍候，我们正在验证您的会话。</p>
+          </>
         )}
         {import.meta.env.DEV && (
           <div className="mt-4 p-3 bg-white/50 rounded text-xs text-gray-600 max-w-md">
             <p>调试信息：</p>
             <p>Processing: {processing ? '是' : '否'}</p>
-            <p>Session: {session ? '已获取' : '未获取'}</p>
-            <p className="break-all">Hash: {window.location.hash.substring(0, 50)}...</p>
+            <p>Auth Success: {authSuccess ? '是' : '否'}</p>
+            <p>User Email: {userEmail || '未获取'}</p>
+            <p className="break-all">URL: {window.location.href.substring(0, 80)}...</p>
           </div>
         )}
       </motion.div>
