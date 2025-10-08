@@ -5297,8 +5297,8 @@ function logToCache(level, message, labels = []) {
 // 用于跟踪已检查的租户（避免重复检查）
 const __popupsTableChecked = new Set();
 
-// 确保 app_popups 表存在
-async function ensureAppPopupsTable(db, tenantId) {
+// 确保 app_popups 表存在（使用原始 LibSQL 客户端）
+async function ensureAppPopupsTable(tenantId) {
   const key = `tenant_${tenantId}`;
   
   // 如果已经检查过这个租户，直接返回
@@ -5307,9 +5307,15 @@ async function ensureAppPopupsTable(db, tenantId) {
   }
   
   try {
-    // 检查表是否存在（使用 Drizzle 的 sql 模板标签）
-    const checkResult = await db.execute(
-      sql`SELECT name FROM sqlite_master WHERE type='table' AND name='app_popups'`
+    // 获取原始的 LibSQL 客户端（不是 Drizzle ORM）
+    const branchUrl = await getBranchUrlForTenant(tenantId);
+    const url = branchUrl || process.env.TURSO_DATABASE_URL || process.env.TURSO_PRIMARY_URL;
+    const authToken = process.env.TURSO_AUTH_TOKEN;
+    const client = createClient({ url, authToken });
+    
+    // 检查表是否存在
+    const checkResult = await client.execute(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='app_popups'"
     );
     
     if (checkResult.rows && checkResult.rows.length > 0) {
@@ -5317,8 +5323,8 @@ async function ensureAppPopupsTable(db, tenantId) {
       return; // 表已存在
     }
     
-    // 创建表（使用 Drizzle 的 sql 模板标签）
-    await db.execute(sql`
+    // 创建表
+    await client.execute(`
       CREATE TABLE IF NOT EXISTS app_popups (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         tenant_id INTEGER DEFAULT 0,
@@ -5337,9 +5343,8 @@ async function ensureAppPopupsTable(db, tenantId) {
     console.log(`✅ Created app_popups table for tenant ${tenantId}`);
     __popupsTableChecked.add(key);
   } catch (e) {
-    console.error('Error ensuring app_popups table:', e);
-    // 即使失败也标记为已检查，避免无限重试
-    __popupsTableChecked.add(key);
+    console.error(`❌ Error ensuring app_popups table for tenant ${tenantId}:`, e);
+    // ⚠️ 失败时不标记为已检查，允许下次重试
     throw e;
   }
 }
@@ -5353,7 +5358,7 @@ app.get('/api/popups', async (c) => {
     const db = await getTursoClientForTenant(tenantId);
     
     // 确保表存在
-    await ensureAppPopupsTable(db, tenantId);
+    await ensureAppPopupsTable(tenantId);
     
     const popups = await db.select()
       .from(appPopups)
@@ -5390,7 +5395,7 @@ app.get('/api/admin/popups', async (c) => {
     const db = await getTursoClientForTenant(tenantId);
     
     // 确保表存在
-    await ensureAppPopupsTable(db, tenantId);
+    await ensureAppPopupsTable(tenantId);
     
     const popups = await db.select()
       .from(appPopups)
@@ -5424,7 +5429,7 @@ app.post('/api/admin/popups', async (c) => {
     const db = await getTursoClientForTenant(tenantId);
     
     // 确保表存在
-    await ensureAppPopupsTable(db, tenantId);
+    await ensureAppPopupsTable(tenantId);
     
     const body = await c.req.json();
     const { title, content, backgroundImage, buttonText, buttonUrl, enabled, order } = body;
@@ -5471,7 +5476,7 @@ app.put('/api/admin/popups/:id', async (c) => {
     const popupId = parseInt(c.req.param('id'));
     
     // 确保表存在
-    await ensureAppPopupsTable(db, tenantId);
+    await ensureAppPopupsTable(tenantId);
     
     const body = await c.req.json();
     const { title, content, backgroundImage, buttonText, buttonUrl, enabled, order } = body;
@@ -5526,7 +5531,7 @@ app.delete('/api/admin/popups/:id', async (c) => {
     const popupId = parseInt(c.req.param('id'));
     
     // 确保表存在
-    await ensureAppPopupsTable(db, tenantId);
+    await ensureAppPopupsTable(tenantId);
     
     await db.delete(appPopups)
       .where(and(
