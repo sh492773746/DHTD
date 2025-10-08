@@ -47,6 +47,7 @@ import AdminSEO from '@/pages/AdminSEO';
 import AdminAPIMonitor from '@/pages/AdminAPIMonitor';
 import AdminAPIDocs from '@/pages/AdminAPIDocs';
 import AdminAuditLogs from '@/pages/AdminAuditLogs';
+import AdminPopupManagement from '@/pages/AdminPopupManagement';
 
 // Tenant Admin Pages
 import TenantDashboard from '@/pages/TenantDashboard';
@@ -167,6 +168,7 @@ const routerConfig = [
             { path: 'api-monitor', element: <AdminAPIMonitor /> },
             { path: 'api-docs', element: <AdminAPIDocs /> },
             { path: 'audit-logs', element: <AdminAuditLogs /> },
+            { path: 'popups', element: <AdminPopupManagement /> },
         ]
       },
       {

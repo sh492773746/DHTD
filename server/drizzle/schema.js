@@ -172,4 +172,19 @@ export const invitations = sqliteTable('invitations', {
   inviteeId: text('invitee_id').notNull(),
   inviterId: text('inviter_id').notNull(),
   createdAt: text('created_at')
+});
+
+// 应用弹窗配置
+export const appPopups = sqliteTable('app_popups', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  tenantId: integer('tenant_id').default(0),
+  enabled: integer('enabled').default(0), // 是否启用
+  title: text('title'), // 标题
+  content: text('content'), // 内容
+  backgroundImage: text('background_image'), // 背景图片 URL
+  buttonText: text('button_text'), // 按钮文字
+  buttonUrl: text('button_url'), // 按钮跳转链接（支持 wangwang:// 协议）
+  order: integer('order').default(0), // 显示顺序（用于分页）
+  createdAt: text('created_at'),
+  updatedAt: text('updated_at')
 }); 

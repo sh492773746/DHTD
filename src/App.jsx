@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useTheme } from '@/contexts/ThemeProvider';
 import { AlertTriangle } from 'lucide-react';
+import AppPopup from '@/components/AppPopup';
 
 const LoadingScreen = () => {
   const { siteSettings } = useAuth();
@@ -108,6 +109,7 @@ function App() {
         {loading && !forceRender && <LoadingScreen />}
       </AnimatePresence>
       {(!loading || forceRender) && element}
+      {(!loading || forceRender) && <AppPopup />}
     </>
   );
 }

@@ -5,7 +5,7 @@ import { createClient } from '@libsql/client';
 import { drizzle } from 'drizzle-orm/libsql';
 import { profiles, appSettings, pageContent as pageContentTable, tenantRequests as tenantRequestsTable, posts as postsTable, notifications as notificationsTable, comments as commentsTable, adminUsers as adminUsersTable, likes as likesTable, tenantAdmins as tenantAdminsTable, branches as branchesTable } from './drizzle/schema.js';
 import { sharedPosts, sharedComments, sharedLikes, sharedProfiles } from './drizzle/schema.js';
-import { shopProducts, shopRedemptions, invitations } from './drizzle/schema.js';
+import { shopProducts, shopRedemptions, invitations, appPopups } from './drizzle/schema.js';
 import { pointsHistory as pointsHistoryTable } from './drizzle/schema.js';
 import { eq, and, inArray, desc, sql } from 'drizzle-orm';
 import { jwtVerify, decodeJwt, createRemoteJWKSet } from 'jose';
@@ -5291,6 +5291,180 @@ function logToCache(level, message, labels = []) {
     if (__logCache.info.length > 100) __logCache.info.pop();
   }
 }
+
+// ==================== 应用弹窗管理 API ====================
+
+// 获取启用的弹窗列表（公开API）
+app.get('/api/popups', async (c) => {
+  try {
+    const db = c.get('db');
+    const tenantId = c.get('tenantId');
+    
+    const popups = await db.select()
+      .from(appPopups)
+      .where(and(
+        eq(appPopups.tenantId, tenantId),
+        eq(appPopups.enabled, 1)
+      ))
+      .orderBy(appPopups.order);
+    
+    return c.json(popups);
+  } catch (e) {
+    console.error('GET /api/popups error:', e);
+    return c.json({ error: 'Failed to fetch popups' }, 500);
+  }
+});
+
+// 获取所有弹窗（包括未启用）- 仅超级管理员
+app.get('/api/admin/popups', async (c) => {
+  try {
+    const user = c.get('user');
+    const db = c.get('db');
+    const tenantId = c.get('tenantId');
+    
+    if (!user) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+    
+    // 检查是否为超级管理员
+    const isSuperAdmin = await checkSuperAdmin(user.id, c.get('token'));
+    if (!isSuperAdmin) {
+      return c.json({ error: 'Forbidden - Super admin only' }, 403);
+    }
+    
+    const popups = await db.select()
+      .from(appPopups)
+      .where(eq(appPopups.tenantId, tenantId))
+      .orderBy(appPopups.order);
+    
+    return c.json(popups);
+  } catch (e) {
+    console.error('GET /api/admin/popups error:', e);
+    return c.json({ error: 'Failed to fetch popups' }, 500);
+  }
+});
+
+// 创建弹窗 - 仅超级管理员
+app.post('/api/admin/popups', async (c) => {
+  try {
+    const user = c.get('user');
+    const db = c.get('db');
+    const tenantId = c.get('tenantId');
+    
+    if (!user) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+    
+    // 检查是否为超级管理员
+    const isSuperAdmin = await checkSuperAdmin(user.id, c.get('token'));
+    if (!isSuperAdmin) {
+      return c.json({ error: 'Forbidden - Super admin only' }, 403);
+    }
+    
+    const body = await c.req.json();
+    const { title, content, backgroundImage, buttonText, buttonUrl, enabled, order } = body;
+    
+    const now = new Date().toISOString();
+    const result = await db.insert(appPopups).values({
+      tenantId,
+      title: title || '',
+      content: content || '',
+      backgroundImage: backgroundImage || '',
+      buttonText: buttonText || '',
+      buttonUrl: buttonUrl || '',
+      enabled: enabled ? 1 : 0,
+      order: order || 0,
+      createdAt: now,
+      updatedAt: now
+    }).returning();
+    
+    return c.json(result[0]);
+  } catch (e) {
+    console.error('POST /api/admin/popups error:', e);
+    return c.json({ error: 'Failed to create popup' }, 500);
+  }
+});
+
+// 更新弹窗 - 仅超级管理员
+app.put('/api/admin/popups/:id', async (c) => {
+  try {
+    const user = c.get('user');
+    const db = c.get('db');
+    const tenantId = c.get('tenantId');
+    const popupId = parseInt(c.req.param('id'));
+    
+    if (!user) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+    
+    // 检查是否为超级管理员
+    const isSuperAdmin = await checkSuperAdmin(user.id, c.get('token'));
+    if (!isSuperAdmin) {
+      return c.json({ error: 'Forbidden - Super admin only' }, 403);
+    }
+    
+    const body = await c.req.json();
+    const { title, content, backgroundImage, buttonText, buttonUrl, enabled, order } = body;
+    
+    const now = new Date().toISOString();
+    const result = await db.update(appPopups)
+      .set({
+        title: title !== undefined ? title : undefined,
+        content: content !== undefined ? content : undefined,
+        backgroundImage: backgroundImage !== undefined ? backgroundImage : undefined,
+        buttonText: buttonText !== undefined ? buttonText : undefined,
+        buttonUrl: buttonUrl !== undefined ? buttonUrl : undefined,
+        enabled: enabled !== undefined ? (enabled ? 1 : 0) : undefined,
+        order: order !== undefined ? order : undefined,
+        updatedAt: now
+      })
+      .where(and(
+        eq(appPopups.id, popupId),
+        eq(appPopups.tenantId, tenantId)
+      ))
+      .returning();
+    
+    if (!result || result.length === 0) {
+      return c.json({ error: 'Popup not found' }, 404);
+    }
+    
+    return c.json(result[0]);
+  } catch (e) {
+    console.error('PUT /api/admin/popups/:id error:', e);
+    return c.json({ error: 'Failed to update popup' }, 500);
+  }
+});
+
+// 删除弹窗 - 仅超级管理员
+app.delete('/api/admin/popups/:id', async (c) => {
+  try {
+    const user = c.get('user');
+    const db = c.get('db');
+    const tenantId = c.get('tenantId');
+    const popupId = parseInt(c.req.param('id'));
+    
+    if (!user) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+    
+    // 检查是否为超级管理员
+    const isSuperAdmin = await checkSuperAdmin(user.id, c.get('token'));
+    if (!isSuperAdmin) {
+      return c.json({ error: 'Forbidden - Super admin only' }, 403);
+    }
+    
+    await db.delete(appPopups)
+      .where(and(
+        eq(appPopups.id, popupId),
+        eq(appPopups.tenantId, tenantId)
+      ));
+    
+    return c.json({ ok: true });
+  } catch (e) {
+    console.error('DELETE /api/admin/popups/:id error:', e);
+    return c.json({ error: 'Failed to delete popup' }, 500);
+  }
+});
 
 // 🔒 初始化審計日誌系統
 try {
