@@ -81,12 +81,19 @@
   - 高级优化方案
   - 性能对比和实施步骤
 
-- [APP_POPUP_GUIDE.md](./APP_POPUP_GUIDE.md) - **应用弹窗功能指南** 🆕
+- [APP_POPUP_GUIDE.md](./APP_POPUP_GUIDE.md) - **应用弹窗功能指南**
   - 功能概述和权限要求
   - 快速开始教程
   - 使用场景（旺旺客服、活动推广）
   - 设计建议和最佳实践
   - 常见问题解答
+
+- [APP_POPUP_FIX.md](./APP_POPUP_FIX.md) - **应用弹窗修复报告** 🆕
+  - 问题诊断和根本原因
+  - 数据库连接修复
+  - 权限检查修复
+  - 修复前后对比
+  - 使用 Render MCP 工具调试
 
 - [USER_DATA_STORAGE.md](./USER_DATA_STORAGE.md) - **用户数据存储架构**
   - 数据存储位置说明
