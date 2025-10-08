@@ -20,76 +20,64 @@ const AuthCallback = () => {
         console.log('🔑 Hash:', window.location.hash);
         console.log('🔍 Search:', window.location.search);
         
-        // 检查 URL 中是否有认证参数
-        const hashParams = new URLSearchParams(window.location.hash.substring(1));
-        const queryParams = new URLSearchParams(window.location.search);
+        // 让 Supabase 自动处理 URL 中的认证参数
+        // Supabase SDK 会自动检测并处理 hash 或 query 中的 token
+        console.log('⏳ 让 Supabase SDK 自动处理认证...');
         
-        const accessToken = hashParams.get('access_token');
-        const refreshToken = hashParams.get('refresh_token');
-        const errorCode = hashParams.get('error');
-        const errorDescription = hashParams.get('error_description');
-        
-        // 检查是否有错误
-        if (errorCode) {
-          console.error('❌ URL 中包含错误:', errorCode, errorDescription);
-          throw new Error(errorDescription || errorCode);
-        }
-        
-        // 如果有 access_token，主动设置 session
-        if (accessToken && refreshToken) {
-          console.log('🔑 检测到 access_token，主动设置 session...');
+        // 等待 Supabase 完成处理（通常需要1-3秒）
+        // Supabase 会通过 onAuthStateChange 触发 session 更新
+        for (let i = 0; i < 6; i++) {
+          await new Promise(resolve => setTimeout(resolve, 500));
           
-          const { data, error } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
+          const { data: { session: currentSession }, error } = await supabase.auth.getSession();
           
           if (error) {
-            console.error('❌ 设置 session 失败:', error);
+            console.error('❌ 获取会话失败:', error);
             throw error;
           }
           
-          if (data.session) {
-            console.log('✅ Session 已设置:', data.session.user.email);
-            console.log('👤 用户 ID:', data.session.user.id);
-            
-            // 等待一下确保 AuthContext 更新
-            await new Promise(resolve => setTimeout(resolve, 500));
+          if (currentSession) {
+            console.log('✅ 会话已获取:', currentSession.user.email);
+            console.log('👤 用户 ID:', currentSession.user.id);
+            console.log(`⏱️ 用时: ${(i + 1) * 500}ms`);
             setProcessing(false);
             return;
           }
+          
+          console.log(`⏳ 等待中... (${(i + 1) * 500}ms)`);
         }
         
-        // 如果没有 token，等待 Supabase 自动处理
-        console.log('⏳ 等待 Supabase 自动处理认证...');
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        // 检查是否获取到 session
-        const { data: { session: currentSession }, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          console.error('❌ 获取会话失败:', error);
-          throw error;
-        }
-        
-        if (currentSession) {
-          console.log('✅ 会话已获取:', currentSession.user.email);
-          console.log('👤 用户 ID:', currentSession.user.id);
-        } else {
-          console.warn('⚠️ 2秒后仍未获取到会话，继续等待...');
-        }
-        
+        // 3秒后仍未获取到 session
+        console.warn('⚠️ 3秒后仍未获取到会话');
         setProcessing(false);
+        
       } catch (error) {
         console.error('❌ 认证回调处理失败:', error);
+        console.error('❌ 错误详情:', {
+          message: error.message,
+          name: error.name,
+          stack: error.stack,
+        });
         setProcessing(false);
+        
+        // 更友好的错误提示
+        let errorMessage = '无法完成邮箱验证，请重试。';
+        
+        if (error.message.includes('expired')) {
+          errorMessage = '验证链接已过期，请重新注册获取新的验证邮件。';
+        } else if (error.message.includes('invalid')) {
+          errorMessage = '验证链接无效，请确认链接是否完整。';
+        } else if (error.message.includes('already')) {
+          errorMessage = '此邮箱已经被验证过，请直接登录。';
+        }
+        
         toast({
           variant: 'destructive',
           title: '验证失败',
-          description: error.message || '无法完成邮箱验证，请重试。',
+          description: errorMessage,
           duration: 6000,
         });
-        setTimeout(() => navigate('/auth'), 2000);
+        setTimeout(() => navigate('/auth'), 3000);
       }
     };
 
