@@ -72,6 +72,7 @@ function App() {
   const { isInitialized, supabase, loading, connectionError } = useAuth();
   const { theme } = useTheme();
   const element = useRoutes(routerConfig);
+  const [forceRender, setForceRender] = React.useState(false);
 
   React.useEffect(() => {
     const root = window.document.documentElement;
@@ -79,6 +80,19 @@ function App() {
     root.setAttribute('data-theme', theme);
     root.classList.add(theme);
   }, [theme]);
+
+  // 添加超时保护：如果 10 秒后仍在加载，强制渲染应用
+  React.useEffect(() => {
+    if (loading && !forceRender) {
+      console.log('⏳ 应用加载中...');
+      const timeoutId = setTimeout(() => {
+        console.warn('⚠️ 加载超时（10秒），强制渲染应用');
+        setForceRender(true);
+      }, 10000); // 10 秒超时
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [loading, forceRender]);
 
   if (connectionError) {
       return <ErrorScreen title="连接错误" message={connectionError} />;
@@ -91,9 +105,9 @@ function App() {
   return (
     <>
       <AnimatePresence>
-        {loading && <LoadingScreen />}
+        {loading && !forceRender && <LoadingScreen />}
       </AnimatePresence>
-      {!loading && isInitialized && element}
+      {(!loading || forceRender) && element}
     </>
   );
 }

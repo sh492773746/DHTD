@@ -219,12 +219,18 @@ export const AuthProvider = ({ children }) => {
   const isAdmin = !!isSuperAdmin || isTenantAdmin;
 
   const isInitialized = useMemo(() => {
-    if (isTenantLoading || !sessionLoaded || areSettingsLoading) return false;
+    // 基础条件：租户和设置必须加载完成
+    if (isTenantLoading || !sessionLoaded) return false;
+    
+    // 如果有用户，等待 profile 等数据加载
+    // 但设置 areSettingsLoading 不阻塞初始化（可以后台加载）
     if (user) {
         return !isProfileLoading && !isSuperAdminLoading && !isTenantAdminLoading;
     }
+    
+    // 未登录用户，只要 session 加载完成就可以
     return true;
-  }, [isTenantLoading, sessionLoaded, user, isProfileLoading, isSuperAdminLoading, isTenantAdminLoading, areSettingsLoading]);
+  }, [isTenantLoading, sessionLoaded, user, isProfileLoading, isSuperAdminLoading, isTenantAdminLoading]);
 
   const loading = !isInitialized;
   
