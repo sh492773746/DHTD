@@ -74,12 +74,19 @@
   - 初始化流程优化
   - 性能指标和建议
 
-- [IMAGE_OPTIMIZATION_GUIDE.md](./IMAGE_OPTIMIZATION_GUIDE.md) - **图片加载优化指南** 🆕
+- [IMAGE_OPTIMIZATION_GUIDE.md](./IMAGE_OPTIMIZATION_GUIDE.md) - **图片加载优化指南**
   - Upstash Redis 配置检查
   - 图片加载慢的原因分析
   - 立即可用的优化方案
   - 高级优化方案
   - 性能对比和实施步骤
+
+- [APP_POPUP_GUIDE.md](./APP_POPUP_GUIDE.md) - **应用弹窗功能指南** 🆕
+  - 功能概述和权限要求
+  - 快速开始教程
+  - 使用场景（旺旺客服、活动推广）
+  - 设计建议和最佳实践
+  - 常见问题解答
 
 - [USER_DATA_STORAGE.md](./USER_DATA_STORAGE.md) - **用户数据存储架构**
   - 数据存储位置说明
