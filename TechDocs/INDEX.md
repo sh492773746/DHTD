@@ -68,11 +68,18 @@
   - Session 生成流程
   - 调试指南
 
-- [APP_LOADING_DIAGNOSIS.md](./APP_LOADING_DIAGNOSIS.md) - **应用加载问题诊断** 🆕
+- [APP_LOADING_DIAGNOSIS.md](./APP_LOADING_DIAGNOSIS.md) - **应用加载问题诊断**
   - 应用卡在加载页面问题
   - 超时保护机制
   - 初始化流程优化
   - 性能指标和建议
+
+- [IMAGE_OPTIMIZATION_GUIDE.md](./IMAGE_OPTIMIZATION_GUIDE.md) - **图片加载优化指南** 🆕
+  - Upstash Redis 配置检查
+  - 图片加载慢的原因分析
+  - 立即可用的优化方案
+  - 高级优化方案
+  - 性能对比和实施步骤
 
 - [USER_DATA_STORAGE.md](./USER_DATA_STORAGE.md) - **用户数据存储架构**
   - 数据存储位置说明
