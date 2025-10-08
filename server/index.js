@@ -5297,8 +5297,10 @@ function logToCache(level, message, labels = []) {
 // 获取启用的弹窗列表（公开API）
 app.get('/api/popups', async (c) => {
   try {
-    const db = c.get('db');
-    const tenantId = c.get('tenantId');
+    const defaultDb = await getTursoClientForTenant(0);
+    const host = c.get('host').split(':')[0];
+    const tenantId = await resolveTenantId(defaultDb, host);
+    const db = await getTursoClientForTenant(tenantId);
     
     const popups = await db.select()
       .from(appPopups)
@@ -5318,19 +5320,21 @@ app.get('/api/popups', async (c) => {
 // 获取所有弹窗（包括未启用）- 仅超级管理员
 app.get('/api/admin/popups', async (c) => {
   try {
-    const user = c.get('user');
-    const db = c.get('db');
-    const tenantId = c.get('tenantId');
-    
-    if (!user) {
+    const userId = c.get('userId');
+    if (!userId) {
       return c.json({ error: 'Unauthorized' }, 401);
     }
     
     // 检查是否为超级管理员
-    const isSuperAdmin = await checkSuperAdmin(user.id, c.get('token'));
-    if (!isSuperAdmin) {
+    const isSuper = await isSuperAdminUser(userId);
+    if (!isSuper) {
       return c.json({ error: 'Forbidden - Super admin only' }, 403);
     }
+    
+    const defaultDb = await getTursoClientForTenant(0);
+    const host = c.get('host').split(':')[0];
+    const tenantId = await resolveTenantId(defaultDb, host);
+    const db = await getTursoClientForTenant(tenantId);
     
     const popups = await db.select()
       .from(appPopups)
@@ -5347,19 +5351,21 @@ app.get('/api/admin/popups', async (c) => {
 // 创建弹窗 - 仅超级管理员
 app.post('/api/admin/popups', async (c) => {
   try {
-    const user = c.get('user');
-    const db = c.get('db');
-    const tenantId = c.get('tenantId');
-    
-    if (!user) {
+    const userId = c.get('userId');
+    if (!userId) {
       return c.json({ error: 'Unauthorized' }, 401);
     }
     
     // 检查是否为超级管理员
-    const isSuperAdmin = await checkSuperAdmin(user.id, c.get('token'));
-    if (!isSuperAdmin) {
+    const isSuper = await isSuperAdminUser(userId);
+    if (!isSuper) {
       return c.json({ error: 'Forbidden - Super admin only' }, 403);
     }
+    
+    const defaultDb = await getTursoClientForTenant(0);
+    const host = c.get('host').split(':')[0];
+    const tenantId = await resolveTenantId(defaultDb, host);
+    const db = await getTursoClientForTenant(tenantId);
     
     const body = await c.req.json();
     const { title, content, backgroundImage, buttonText, buttonUrl, enabled, order } = body;
@@ -5388,20 +5394,22 @@ app.post('/api/admin/popups', async (c) => {
 // 更新弹窗 - 仅超级管理员
 app.put('/api/admin/popups/:id', async (c) => {
   try {
-    const user = c.get('user');
-    const db = c.get('db');
-    const tenantId = c.get('tenantId');
-    const popupId = parseInt(c.req.param('id'));
-    
-    if (!user) {
+    const userId = c.get('userId');
+    if (!userId) {
       return c.json({ error: 'Unauthorized' }, 401);
     }
     
     // 检查是否为超级管理员
-    const isSuperAdmin = await checkSuperAdmin(user.id, c.get('token'));
-    if (!isSuperAdmin) {
+    const isSuper = await isSuperAdminUser(userId);
+    if (!isSuper) {
       return c.json({ error: 'Forbidden - Super admin only' }, 403);
     }
+    
+    const defaultDb = await getTursoClientForTenant(0);
+    const host = c.get('host').split(':')[0];
+    const tenantId = await resolveTenantId(defaultDb, host);
+    const db = await getTursoClientForTenant(tenantId);
+    const popupId = parseInt(c.req.param('id'));
     
     const body = await c.req.json();
     const { title, content, backgroundImage, buttonText, buttonUrl, enabled, order } = body;
@@ -5438,20 +5446,22 @@ app.put('/api/admin/popups/:id', async (c) => {
 // 删除弹窗 - 仅超级管理员
 app.delete('/api/admin/popups/:id', async (c) => {
   try {
-    const user = c.get('user');
-    const db = c.get('db');
-    const tenantId = c.get('tenantId');
-    const popupId = parseInt(c.req.param('id'));
-    
-    if (!user) {
+    const userId = c.get('userId');
+    if (!userId) {
       return c.json({ error: 'Unauthorized' }, 401);
     }
     
     // 检查是否为超级管理员
-    const isSuperAdmin = await checkSuperAdmin(user.id, c.get('token'));
-    if (!isSuperAdmin) {
+    const isSuper = await isSuperAdminUser(userId);
+    if (!isSuper) {
       return c.json({ error: 'Forbidden - Super admin only' }, 403);
     }
+    
+    const defaultDb = await getTursoClientForTenant(0);
+    const host = c.get('host').split(':')[0];
+    const tenantId = await resolveTenantId(defaultDb, host);
+    const db = await getTursoClientForTenant(tenantId);
+    const popupId = parseInt(c.req.param('id'));
     
     await db.delete(appPopups)
       .where(and(
