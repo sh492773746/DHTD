@@ -5307,9 +5307,9 @@ async function ensureAppPopupsTable(db, tenantId) {
   }
   
   try {
-    // 检查表是否存在
+    // 检查表是否存在（使用 Drizzle 的 sql 标签）
     const checkResult = await db.execute(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='app_popups'"
+      sql.raw("SELECT name FROM sqlite_master WHERE type='table' AND name='app_popups'")
     );
     
     if (checkResult.rows && checkResult.rows.length > 0) {
@@ -5317,8 +5317,8 @@ async function ensureAppPopupsTable(db, tenantId) {
       return; // 表已存在
     }
     
-    // 创建表
-    await db.execute(`
+    // 创建表（使用 Drizzle 的 sql 标签）
+    await db.execute(sql.raw(`
       CREATE TABLE IF NOT EXISTS app_popups (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         tenant_id INTEGER DEFAULT 0,
@@ -5332,7 +5332,7 @@ async function ensureAppPopupsTable(db, tenantId) {
         created_at TEXT,
         updated_at TEXT
       )
-    `);
+    `));
     
     console.log(`✅ Created app_popups table for tenant ${tenantId}`);
     __popupsTableChecked.add(key);
