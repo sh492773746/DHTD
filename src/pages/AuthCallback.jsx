@@ -20,36 +20,89 @@ const AuthCallback = () => {
         console.log('🔑 Hash:', window.location.hash);
         console.log('🔍 Search:', window.location.search);
         
-        // 让 Supabase 自动处理 URL 中的认证参数
-        // Supabase SDK 会自动检测并处理 hash 或 query 中的 token
-        console.log('⏳ 让 Supabase SDK 自动处理认证...');
+        // 解析 URL 参数
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const searchParams = new URLSearchParams(window.location.search);
         
-        // 等待 Supabase 完成处理（通常需要1-3秒）
-        // Supabase 会通过 onAuthStateChange 触发 session 更新
-        for (let i = 0; i < 6; i++) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+        // 检查错误参数（可能在 hash 或 search 中）
+        const errorCode = searchParams.get('error') || hashParams.get('error');
+        const errorDescription = searchParams.get('error_description') || hashParams.get('error_description');
+        
+        if (errorCode) {
+          console.error('❌ URL 中包含错误:', errorCode, errorDescription);
+          throw new Error(errorDescription || errorCode);
+        }
+        
+        // 🔑 PKCE Flow: 检查 query string 中的 code 参数（邮箱验证使用此方式）
+        const code = searchParams.get('code');
+        
+        if (code) {
+          console.log('🔑 检测到 PKCE code，开始交换 session...');
+          console.log('📝 Code:', code.substring(0, 20) + '...');
           
-          const { data: { session: currentSession }, error } = await supabase.auth.getSession();
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
           
           if (error) {
-            console.error('❌ 获取会话失败:', error);
+            console.error('❌ 交换 code 失败:', error);
             throw error;
           }
           
-          if (currentSession) {
-            console.log('✅ 会话已获取:', currentSession.user.email);
-            console.log('👤 用户 ID:', currentSession.user.id);
-            console.log(`⏱️ 用时: ${(i + 1) * 500}ms`);
+          if (data.session) {
+            console.log('✅ Session 交换成功！');
+            console.log('👤 用户:', data.session.user.email);
+            console.log('🆔 用户 ID:', data.session.user.id);
+            setProcessing(false);
+            return;
+          } else {
+            console.error('❌ 交换成功但未返回 session');
+            throw new Error('未能创建会话');
+          }
+        }
+        
+        // 🔑 Implicit Flow: 检查 hash 中的 access_token（某些 OAuth 使用此方式）
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+        
+        if (accessToken && refreshToken) {
+          console.log('🔑 检测到 access_token，设置 session...');
+          
+          const { data, error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          
+          if (error) {
+            console.error('❌ 设置 session 失败:', error);
+            throw error;
+          }
+          
+          if (data.session) {
+            console.log('✅ Session 设置成功！');
+            console.log('👤 用户:', data.session.user.email);
             setProcessing(false);
             return;
           }
-          
-          console.log(`⏳ 等待中... (${(i + 1) * 500}ms)`);
         }
         
-        // 3秒后仍未获取到 session
-        console.warn('⚠️ 3秒后仍未获取到会话');
-        setProcessing(false);
+        // 🔄 如果没有 code 或 token，可能是直接访问或其他情况
+        console.warn('⚠️ 未检测到 code 或 token，尝试获取当前 session...');
+        
+        const { data: { session: currentSession }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('❌ 获取 session 失败:', error);
+          throw error;
+        }
+        
+        if (currentSession) {
+          console.log('✅ 当前已有 session:', currentSession.user.email);
+          setProcessing(false);
+          return;
+        }
+        
+        // 没有找到任何认证信息
+        console.error('❌ 未找到任何认证信息');
+        throw new Error('未找到认证参数，请重新验证');
         
       } catch (error) {
         console.error('❌ 认证回调处理失败:', error);
@@ -63,12 +116,14 @@ const AuthCallback = () => {
         // 更友好的错误提示
         let errorMessage = '无法完成邮箱验证，请重试。';
         
-        if (error.message.includes('expired')) {
+        if (error.message?.includes('expired') || error.message?.includes('Expired')) {
           errorMessage = '验证链接已过期，请重新注册获取新的验证邮件。';
-        } else if (error.message.includes('invalid')) {
-          errorMessage = '验证链接无效，请确认链接是否完整。';
-        } else if (error.message.includes('already')) {
+        } else if (error.message?.includes('invalid') || error.message?.includes('Invalid')) {
+          errorMessage = '验证链接无效或已被使用，请重新注册。';
+        } else if (error.message?.includes('already') || error.message?.includes('Already')) {
           errorMessage = '此邮箱已经被验证过，请直接登录。';
+        } else if (error.message?.includes('not found') || error.message?.includes('Not found')) {
+          errorMessage = '验证链接无效，请确认链接是否完整。';
         }
         
         toast({
