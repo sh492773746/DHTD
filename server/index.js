@@ -572,12 +572,27 @@ app.get('/api/health', (c) => c.json({ ok: true, status: 'healthy', timestamp: n
 const PREDICTION_API_BASE = 'http://156.67.218.225:5000';
 const PREDICTION_API_KEY = 'jnd28_api_key_5a738f303ae60b7183fa56773e8a3506';
 
+// 简单的内存缓存（60秒过期）
+const predictionCache = new Map();
+const CACHE_TTL = 60 * 1000; // 60秒
+
+// 429 错误计数器（避免日志污染）
+let rateLimitErrorCount = 0;
+let lastRateLimitLog = 0;
+
 app.get('/api/prediction-proxy/*', async (c) => {
   try {
     // 从路径中提取实际的 API 端点
     const path = c.req.path.replace('/api/prediction-proxy', '');
     const queryString = c.req.url.split('?')[1] || '';
     const externalUrl = `${PREDICTION_API_BASE}${path}${queryString ? '?' + queryString : ''}`;
+    const cacheKey = externalUrl;
+    
+    // 检查缓存
+    const cached = predictionCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return c.json(cached.data);
+    }
     
     console.log('🔄 Proxying prediction API:', externalUrl);
     
@@ -591,8 +606,32 @@ app.get('/api/prediction-proxy/*', async (c) => {
     });
     
     if (!response.ok) {
+      // 特殊处理 429 错误（避免日志污染）
+      if (response.status === 429) {
+        rateLimitErrorCount++;
+        const now = Date.now();
+        // 每分钟只记录一次429错误统计
+        if (now - lastRateLimitLog > 60000) {
+          console.warn(`⚠️ External API rate limit: ${rateLimitErrorCount} requests throttled in last minute`);
+          rateLimitErrorCount = 0;
+          lastRateLimitLog = now;
+        }
+        
+        // 返回缓存数据（如果有），即使已过期
+        if (cached) {
+          console.log('📦 Returning stale cache due to rate limit');
+          return c.json(cached.data);
+        }
+        
+        return c.json({ 
+          success: false, 
+          error: 'External API rate limit exceeded. Please try again later.' 
+        }, 429);
+      }
+      
+      // 其他错误正常记录
       const errorText = await response.text();
-      console.error('❌ External API error:', response.status, errorText);
+      console.error(`❌ External API error: ${response.status}`, errorText.substring(0, 200));
       return c.json({ 
         success: false, 
         error: `External API error: ${response.status}` 
@@ -602,6 +641,7 @@ app.get('/api/prediction-proxy/*', async (c) => {
     const data = await response.json();
     
     // 转换外部 API 的响应格式
+    let result;
     if (data.status === 'success') {
       // 针对不同端点返回不同的数据结构
       let responseData;
@@ -618,10 +658,26 @@ app.get('/api/prediction-proxy/*', async (c) => {
         responseData = rest;
       }
       
-      return c.json({ success: true, data: responseData });
+      result = { success: true, data: responseData };
     } else {
-      return c.json({ success: false, error: data.message || 'Unknown error' }, 400);
+      result = { success: false, error: data.message || 'Unknown error' };
     }
+    
+    // 缓存成功的响应
+    if (result.success) {
+      predictionCache.set(cacheKey, {
+        data: result,
+        timestamp: Date.now()
+      });
+      
+      // 限制缓存大小（最多100个条目）
+      if (predictionCache.size > 100) {
+        const firstKey = predictionCache.keys().next().value;
+        predictionCache.delete(firstKey);
+      }
+    }
+    
+    return c.json(result);
   } catch (error) {
     console.error('❌ Prediction proxy error:', error);
     return c.json({ success: false, error: error.message }, 500);
