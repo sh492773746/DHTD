@@ -832,12 +832,20 @@ app.post('/api/uploads/post-images', async (c) => {
         } else if (isWebp) {
           outBuf = await sharp(buf).rotate().webp({ quality: 85 }).toBuffer();
         } else {
-          outBuf = await sharp(buf).rotate().jpeg({ quality: 90 }).toBuffer();
+          outBuf = await sharp(buf).rotate().jpeg({ 
+            quality: 90,
+            progressive: true,     // 渐进式 JPEG
+            optimizeScans: true    // 优化扫描
+          }).toBuffer();
         }
       } catch {}
       const { error: upErr } = await supa.storage
         .from(bucket)
-        .upload(objectPath, outBuf, { contentType: (file.type || 'image/jpeg'), cacheControl: '3600', upsert: false });
+        .upload(objectPath, outBuf, { 
+          contentType: (file.type || 'image/jpeg'), 
+          cacheControl: 'public, max-age=31536000, immutable', // 1 年缓存
+          upsert: false 
+        });
       if (upErr) {
         if (String(upErr.message || '').includes('exists')) {
           const { data: { publicUrl } } = supa.storage.from(bucket).getPublicUrl(objectPath);
